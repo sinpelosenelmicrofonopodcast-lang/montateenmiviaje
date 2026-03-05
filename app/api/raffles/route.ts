@@ -1,0 +1,45 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { enterRaffle, listRaffles } from "@/lib/booking-store";
+
+const joinSchema = z.object({
+  raffleId: z.string().uuid(),
+  customerEmail: z.string().email(),
+  chosenNumber: z.number().int().positive(),
+  note: z.string().max(400).optional(),
+  paymentReference: z.string().max(120).optional()
+});
+
+export async function GET() {
+  return NextResponse.json({ raffles: listRaffles({ includeClosed: true }) });
+}
+
+export async function POST(request: Request) {
+  try {
+    const payload = joinSchema.parse(await request.json());
+    const entry = enterRaffle(
+      payload.raffleId,
+      payload.customerEmail,
+      payload.chosenNumber,
+      payload.note,
+      payload.paymentReference
+    );
+    return NextResponse.json({ ok: true, entry });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ message: "Payload inválido", issues: error.issues }, { status: 400 });
+    }
+
+    const message = error instanceof Error ? error.message : "Error interno";
+    const status =
+      message.includes("registrado") ||
+      message.includes("disponible") ||
+      message.includes("participas") ||
+      message.includes("número") ||
+      message.includes("cerró") ||
+      message.includes("inicia")
+        ? 400
+        : 500;
+    return NextResponse.json({ message }, { status });
+  }
+}
