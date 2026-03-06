@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
-import { isAdminRole, normalizeRole, type AppRole } from "@/lib/admin-auth";
+import { isAdminRole, isAdminUser, normalizeRole, type AppRole } from "@/lib/admin-auth";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 interface ProfileRoleRow {
@@ -49,14 +49,15 @@ export async function getServerAuthContext(): Promise<ServerAuthContext> {
   if (profileResult.error) {
     return {
       user,
-      role: "user",
+      role: isAdminUser(user) ? "admin" : "user",
       email: user.email ?? null
     };
   }
 
+  const resolvedRole = normalizeRole(profileResult.data?.role);
   return {
     user,
-    role: normalizeRole(profileResult.data?.role),
+    role: resolvedRole === "user" && isAdminUser(user) ? "admin" : resolvedRole,
     email: profileResult.data?.email ?? user.email ?? null
   };
 }

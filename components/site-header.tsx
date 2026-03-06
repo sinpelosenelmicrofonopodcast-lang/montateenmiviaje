@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { getPortalSessionContext } from "@/lib/portal-auth";
+import { getServerAuthContext } from "@/lib/admin-guard";
 
 const links = [
   { href: "/", label: "Home" },
@@ -16,7 +16,9 @@ const links = [
 ];
 
 export async function SiteHeader() {
-  const portalSession = await getPortalSessionContext();
+  const auth = await getServerAuthContext();
+  const isLoggedIn = Boolean(auth.user);
+  const isAdmin = auth.role === "admin";
 
   return (
     <header className="site-header">
@@ -31,7 +33,9 @@ export async function SiteHeader() {
               {link.label}
             </Link>
           ))}
-          {portalSession ? <Link href="/portal">Portal</Link> : null}
+          {isLoggedIn ? <Link href="/dashboard">Dashboard</Link> : null}
+          {isLoggedIn ? <Link href="/portal">Portal</Link> : null}
+          {isAdmin ? <Link href="/dashboard/admin">Admin</Link> : null}
         </nav>
       </div>
     </header>

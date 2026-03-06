@@ -1,6 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
-import { isAdminRole } from "@/lib/admin-auth";
+import { isAdminRole, isAdminUser } from "@/lib/admin-auth";
 
 const ADMIN_WEB_PREFIXES = ["/dashboard/admin", "/admin"];
 const ADMIN_API_PREFIX = "/api/admin";
@@ -104,7 +104,9 @@ export async function middleware(request: NextRequest) {
     .eq("id", user.id)
     .maybeSingle<{ role: string | null }>();
 
-  if (profileResult.error || !isAdminRole(profileResult.data?.role)) {
+  const hasAdminAccess = isAdminRole(profileResult.data?.role) || isAdminUser(user);
+
+  if (profileResult.error || !hasAdminAccess) {
     return isAdminApi ? toApiForbidden("Permisos insuficientes") : toHomeRedirect(request);
   }
 
