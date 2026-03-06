@@ -5,6 +5,8 @@ import { isAdminRole } from "@/lib/admin-auth";
 const ADMIN_WEB_PREFIXES = ["/dashboard/admin", "/admin"];
 const ADMIN_API_PREFIX = "/api/admin";
 const LEGACY_PUBLIC_ADMIN_PATHS = new Set(["/admin/login", "/admin/forbidden"]);
+const PORTAL_PREFIX = "/portal";
+const PUBLIC_PORTAL_PATHS = new Set(["/portal/login", "/portal/register"]);
 
 function hasSupabasePublicConfig() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -31,16 +33,24 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isAdminWeb = isProtectedAdminWebPath(pathname);
   const isAdminApi = pathname.startsWith(ADMIN_API_PREFIX);
+  const isPortalPath = pathname === PORTAL_PREFIX || pathname.startsWith(`${PORTAL_PREFIX}/`);
 
   if (LEGACY_PUBLIC_ADMIN_PATHS.has(pathname)) {
     return NextResponse.next();
   }
 
-  if (!isAdminWeb && !isAdminApi) {
+  if (PUBLIC_PORTAL_PATHS.has(pathname)) {
+    return NextResponse.next();
+  }
+
+  if (!isAdminWeb && !isAdminApi && !isPortalPath) {
     return NextResponse.next();
   }
 
   if (!hasSupabasePublicConfig()) {
+    if (isPortalPath) {
+      return toHomeRedirect(request);
+    }
     return isAdminApi
       ? toApiForbidden("Supabase auth no configurado")
       : toHomeRedirect(request);
@@ -75,7 +85,17 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
+    if (isPortalPath) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/portal/login";
+      loginUrl.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`);
+      return NextResponse.redirect(loginUrl);
+    }
     return isAdminApi ? toApiForbidden("No autorizado") : toHomeRedirect(request);
+  }
+
+  if (isPortalPath) {
+    return response;
   }
 
   const profileResult = await supabase
@@ -92,5 +112,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/admin/:path*", "/admin/:path*", "/api/admin/:path*"]
+  matcher: ["/dashboard/admin/:path*", "/admin/:path*", "/api/admin/:path*", "/portal/:path*"]
 };

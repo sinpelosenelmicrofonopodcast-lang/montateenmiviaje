@@ -1,6 +1,10 @@
 import { listChecklistItemsService } from "@/lib/catalog-service";
+import { requirePortalSession } from "@/lib/portal-auth";
+
+export const dynamic = "force-dynamic";
 
 export default async function PortalChecklistPage() {
+  await requirePortalSession();
   const checklistTemplate = await listChecklistItemsService();
 
   return (

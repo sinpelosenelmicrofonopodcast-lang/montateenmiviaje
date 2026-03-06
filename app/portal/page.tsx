@@ -1,4 +1,8 @@
 import Link from "next/link";
+import { PortalLogoutButton } from "@/components/custom/portal-logout-button";
+import { requirePortalSession } from "@/lib/portal-auth";
+
+export const dynamic = "force-dynamic";
 
 const modules = [
   { href: "/portal/mis-viajes", label: "Mis viajes", helper: "Itinerario y estado" },
@@ -10,12 +14,16 @@ const modules = [
   { href: "/portal/wallet", label: "Travel wallet", helper: "Opcional premium" }
 ];
 
-export default function PortalPage() {
+export default async function PortalPage() {
+  const session = await requirePortalSession();
+
   return (
     <main className="container section">
       <header className="page-header">
         <p className="chip">Portal Cliente</p>
         <h1>Tu espacio privado</h1>
+        <p className="section-subtitle">{session.email}</p>
+        <PortalLogoutButton />
       </header>
       <section className="portal-grid">
         {modules.map((module) => (

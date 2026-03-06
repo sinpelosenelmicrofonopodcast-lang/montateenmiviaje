@@ -4,7 +4,8 @@ import { registerCustomerService } from "@/lib/raffles-service";
 
 const schema = z.object({
   fullName: z.string().min(2),
-  email: z.string().email()
+  email: z.string().email(),
+  authUserId: z.string().uuid().optional()
 });
 
 export async function POST(request: Request) {

@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { getPortalSessionContext } from "@/lib/portal-auth";
 
 const links = [
   { href: "/", label: "Home" },
@@ -11,11 +12,12 @@ const links = [
   { href: "/testimonios", label: "Testimonios" },
   { href: "/galeria", label: "Galería" },
   { href: "/about", label: "About" },
-  { href: "/contacto", label: "Contacto" },
-  { href: "/portal", label: "Portal" }
+  { href: "/contacto", label: "Contacto" }
 ];
 
-export function SiteHeader() {
+export async function SiteHeader() {
+  const portalSession = await getPortalSessionContext();
+
   return (
     <header className="site-header">
       <div className="container nav-shell">
@@ -29,6 +31,7 @@ export function SiteHeader() {
               {link.label}
             </Link>
           ))}
+          {portalSession ? <Link href="/portal">Portal</Link> : null}
         </nav>
       </div>
     </header>

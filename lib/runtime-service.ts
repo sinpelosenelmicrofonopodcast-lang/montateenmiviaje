@@ -55,6 +55,7 @@ export interface CreateCustomProposalInput {
 
 interface AppCustomerRow {
   id: string;
+  auth_user_id: string | null;
   full_name: string;
   email: string;
   is_registered: boolean;
@@ -197,6 +198,15 @@ interface PortalBundle {
   documents: DocumentRecord[];
 }
 
+function emptyPortalBundle(): PortalBundle {
+  return {
+    customer: null,
+    bookings: [],
+    payments: [],
+    documents: []
+  };
+}
+
 function ensureConfigured() {
   if (!hasSupabaseConfig()) {
     throw new Error("Supabase no está configurado");
@@ -220,6 +230,7 @@ function parseInstallmentCount(paymentPlan: string) {
 function mapCustomer(row: AppCustomerRow): Customer {
   return {
     id: row.id,
+    authUserId: row.auth_user_id ?? undefined,
     fullName: row.full_name,
     email: row.email,
     isRegistered: row.is_registered,
@@ -357,6 +368,7 @@ async function getOrCreateCustomerByEmail(input: {
   fullName: string;
   email: string;
   pipelineStage?: BookingStage;
+  authUserId?: string;
 }): Promise<AppCustomerRow> {
   ensureConfigured();
   const supabase = getSupabaseAdminClient();
@@ -380,6 +392,7 @@ async function getOrCreateCustomerByEmail(input: {
       .from("app_customers")
       .update({
         full_name: input.fullName.trim(),
+        auth_user_id: input.authUserId ?? existing.data.auth_user_id,
         pipeline_stage: input.pipelineStage ?? existing.data.pipeline_stage,
         tags: [...nextTags],
         updated_at: new Date().toISOString()
@@ -399,6 +412,7 @@ async function getOrCreateCustomerByEmail(input: {
     .from("app_customers")
     .insert({
       full_name: input.fullName.trim(),
+      auth_user_id: input.authUserId ?? null,
       email,
       is_registered: false,
       preferences: ["premium", "grupo"],
@@ -1015,20 +1029,114 @@ export async function getTripRevenueRowsService() {
 }
 
 export async function getPortalBundleService(email?: string): Promise<PortalBundle> {
+  if (!email) {
+    return emptyPortalBundle();
+  }
+
   const customers = await listCustomersService();
-  const normalizedEmail = email ? normalizeEmail(email) : undefined;
-  const customer = normalizedEmail
-    ? customers.find((item) => normalizeEmail(item.email) === normalizedEmail)
-    : customers[0];
+  const normalizedEmail = normalizeEmail(email);
+  const customer = customers.find((item) => normalizeEmail(item.email) === normalizedEmail);
 
   if (!customer) {
-    return {
-      customer: null,
-      bookings: [],
-      payments: [],
-      documents: []
-    };
+    return emptyPortalBundle();
   }
+
+  const bookings = (await listBookingsService()).filter((booking) => booking.customerId === customer.id);
+  const bookingIds = new Set(bookings.map((booking) => booking.id));
+  const payments = (await listPaymentsService()).filter((payment) => bookingIds.has(payment.bookingId));
+  const documents = (await listDocumentsService()).filter(
+    (document) =>
+      (document.entityType === "customer" && document.entityId === customer.id) ||
+      (document.entityType === "booking" && bookingIds.has(document.entityId))
+  );
+
+  return {
+    customer,
+    bookings,
+    payments,
+    documents
+  };
+}
+
+async function findCustomerByAuthUser(authUserId: string, email?: string) {
+  ensureConfigured();
+  const supabase = getSupabaseAdminClient();
+
+  const byAuth = await supabase
+    .from("app_customers")
+    .select("*")
+    .eq("auth_user_id", authUserId)
+    .maybeSingle<AppCustomerRow>();
+
+  if (byAuth.error) {
+    throw new Error(`No se pudo consultar cliente por sesión: ${byAuth.error.message}`);
+  }
+
+  if (byAuth.data) {
+    return byAuth.data;
+  }
+
+  if (!email) {
+    return null;
+  }
+
+  const normalizedEmail = normalizeEmail(email);
+  const byEmail = await supabase
+    .from("app_customers")
+    .select("*")
+    .eq("email", normalizedEmail)
+    .maybeSingle<AppCustomerRow>();
+
+  if (byEmail.error) {
+    throw new Error(`No se pudo consultar cliente por email: ${byEmail.error.message}`);
+  }
+
+  if (!byEmail.data) {
+    return null;
+  }
+
+  if (byEmail.data.auth_user_id) {
+    return byEmail.data;
+  }
+
+  const linked = await supabase
+    .from("app_customers")
+    .update({
+      auth_user_id: authUserId,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", byEmail.data.id)
+    .select("*")
+    .single<AppCustomerRow>();
+
+  if (linked.error || !linked.data) {
+    throw new Error(`No se pudo vincular cuenta de cliente: ${linked.error?.message ?? "sin datos"}`);
+  }
+
+  return linked.data;
+}
+
+export async function getPortalBundleForAuthUserService(
+  authUserId: string,
+  email?: string
+): Promise<PortalBundle> {
+  if (!hasSupabaseConfig()) {
+    return emptyPortalBundle();
+  }
+
+  const customerRow = await findCustomerByAuthUser(authUserId, email);
+  if (!customerRow) {
+    return emptyPortalBundle();
+  }
+
+  const customers = await listCustomersService();
+  const customer =
+    customers.find((item) => item.id === customerRow.id) ??
+    {
+      ...mapCustomer(customerRow),
+      bookingsCount: 0,
+      lifetimeValue: 0
+    };
 
   const bookings = (await listBookingsService()).filter((booking) => booking.customerId === customer.id);
   const bookingIds = new Set(bookings.map((booking) => booking.id));

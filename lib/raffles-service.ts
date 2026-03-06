@@ -4,6 +4,7 @@ import { Customer, Raffle, RaffleEntry, RaffleEntryStatus } from "@/lib/types";
 export interface RegisterCustomerInput {
   fullName: string;
   email: string;
+  authUserId?: string;
 }
 
 export interface CreateRaffleInput {
@@ -28,6 +29,7 @@ export interface DrawRaffleWinnerResult {
 
 interface AppCustomerRow {
   id: string;
+  auth_user_id: string | null;
   full_name: string;
   email: string;
   is_registered: boolean;
@@ -70,6 +72,7 @@ interface AppRaffleEntryRow {
 function mapCustomer(row: AppCustomerRow): Customer {
   return {
     id: row.id,
+    authUserId: row.auth_user_id ?? undefined,
     fullName: row.full_name,
     email: row.email,
     isRegistered: row.is_registered,
@@ -258,11 +261,14 @@ export async function registerCustomerService(input: RegisterCustomerInput) {
   ensureConfigured();
 
   const supabase = getSupabaseAdminClient();
-  const payload = {
+  const payload: Record<string, unknown> = {
     full_name: input.fullName.trim(),
     email: normalizeEmail(input.email),
     is_registered: true
   };
+  if (input.authUserId) {
+    payload.auth_user_id = input.authUserId;
+  }
 
   const { data, error } = await supabase
     .from("app_customers")

@@ -1,15 +1,12 @@
 import { formatMoney } from "@/lib/format";
-import { getPortalBundleService } from "@/lib/runtime-service";
+import { requirePortalSession } from "@/lib/portal-auth";
+import { getPortalBundleForAuthUserService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
-interface PortalPagosPageProps {
-  searchParams: Promise<{ email?: string }>;
-}
-
-export default async function PortalPagosPage({ searchParams }: PortalPagosPageProps) {
-  const params = await searchParams;
-  const bundle = await getPortalBundleService(params.email);
+export default async function PortalPagosPage() {
+  const session = await requirePortalSession();
+  const bundle = await getPortalBundleForAuthUserService(session.user.id, session.email);
 
   return (
     <main className="container section">

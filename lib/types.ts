@@ -62,6 +62,7 @@ export interface Testimonial {
 
 export interface Customer {
   id: string;
+  authUserId?: string;
   fullName: string;
   email: string;
   isRegistered: boolean;

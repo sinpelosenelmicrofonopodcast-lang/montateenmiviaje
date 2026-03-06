@@ -1,4 +1,10 @@
-export default function PortalSoportePage() {
+import { requirePortalSession } from "@/lib/portal-auth";
+
+export const dynamic = "force-dynamic";
+
+export default async function PortalSoportePage() {
+  await requirePortalSession();
+
   return (
     <main className="container section">
       <header className="page-header">

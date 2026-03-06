@@ -1,14 +1,11 @@
-import { getPortalBundleService } from "@/lib/runtime-service";
+import { requirePortalSession } from "@/lib/portal-auth";
+import { getPortalBundleForAuthUserService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
-interface PortalDocumentosPageProps {
-  searchParams: Promise<{ email?: string }>;
-}
-
-export default async function PortalDocumentosPage({ searchParams }: PortalDocumentosPageProps) {
-  const params = await searchParams;
-  const bundle = await getPortalBundleService(params.email);
+export default async function PortalDocumentosPage() {
+  const session = await requirePortalSession();
+  const bundle = await getPortalBundleForAuthUserService(session.user.id, session.email);
 
   return (
     <main className="container section">

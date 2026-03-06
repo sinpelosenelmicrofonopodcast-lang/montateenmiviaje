@@ -1,17 +1,17 @@
 import Link from "next/link";
 import { listTripsService } from "@/lib/catalog-service";
 import { formatDateRange, formatMoney } from "@/lib/format";
-import { getPortalBundleService } from "@/lib/runtime-service";
+import { requirePortalSession } from "@/lib/portal-auth";
+import { getPortalBundleForAuthUserService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
-interface PortalMisViajesPageProps {
-  searchParams: Promise<{ email?: string }>;
-}
-
-export default async function PortalMisViajesPage({ searchParams }: PortalMisViajesPageProps) {
-  const params = await searchParams;
-  const [bundle, trips] = await Promise.all([getPortalBundleService(params.email), listTripsService()]);
+export default async function PortalMisViajesPage() {
+  const session = await requirePortalSession();
+  const [bundle, trips] = await Promise.all([
+    getPortalBundleForAuthUserService(session.user.id, session.email),
+    listTripsService()
+  ]);
   const tripMap = new Map(trips.map((trip) => [trip.slug, trip]));
 
   return (

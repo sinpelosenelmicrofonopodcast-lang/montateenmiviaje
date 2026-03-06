@@ -56,6 +56,7 @@ Copia `.env.example` a `.env.local` y completa:
    - `supabase/migrations/003_runtime_catalog.sql`
    - `supabase/migrations/004_runtime_operations.sql`
    - `supabase/migrations/005_profiles_admin_auth.sql`
+   - `supabase/migrations/006_portal_auth_link.sql`
 3. Configura en Vercel/local:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -84,6 +85,12 @@ npm run dev
 ```
 
 Abrir [http://localhost:3000](http://localhost:3000).
+
+## Portal cliente (sesión obligatoria)
+- Registro de cuenta cliente: `/portal/register` (también disponible en `/registro`).
+- Login portal: `/portal/login`.
+- Rutas privadas del portal (`/portal`, `/portal/*`) solo accesibles con sesión activa.
+- El enlace de `Portal` en navegación solo se muestra cuando el usuario está autenticado.
 
 ## Endpoints clave
 - `POST /api/bookings`
