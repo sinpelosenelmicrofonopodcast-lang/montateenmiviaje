@@ -10,6 +10,7 @@ export function RegisterUserForm() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -35,12 +36,18 @@ export function RegisterUserForm() {
         throw new Error("Las contraseñas no coinciden");
       }
 
+      const normalizedPhone = phone.trim();
+      if (normalizedPhone.length < 7) {
+        throw new Error("Ingresa un número de teléfono válido");
+      }
+
       const signUp = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
         options: {
           data: {
-            full_name: fullName.trim()
+            full_name: fullName.trim(),
+            phone: normalizedPhone
           }
         }
       });
@@ -55,6 +62,7 @@ export function RegisterUserForm() {
         body: JSON.stringify({
           fullName,
           email,
+          phone: normalizedPhone,
           authUserId: signUp.data.user?.id
         })
       });
@@ -77,6 +85,7 @@ export function RegisterUserForm() {
       );
       setFullName("");
       setEmail("");
+      setPhone("");
       setPassword("");
       setConfirmPassword("");
     } catch (registerError) {
@@ -99,6 +108,16 @@ export function RegisterUserForm() {
         <label>
           Correo
           <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+        </label>
+        <label>
+          Teléfono (WhatsApp)
+          <input
+            type="tel"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            autoComplete="tel"
+            required
+          />
         </label>
         <label>
           Contraseña

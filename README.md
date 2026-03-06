@@ -57,6 +57,7 @@ Copia `.env.example` a `.env.local` y completa:
    - `supabase/migrations/004_runtime_operations.sql`
    - `supabase/migrations/005_profiles_admin_auth.sql`
    - `supabase/migrations/006_portal_auth_link.sql`
+   - `supabase/migrations/007_profiles_sync_and_phone.sql`
 3. Configura en Vercel/local:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -72,8 +73,8 @@ Copia `.env.example` a `.env.local` y completa:
 Ejemplo SQL para asignar rol admin en Supabase (SQL Editor):
 
 ```sql
-update auth.users
-set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"role":"admin"}'::jsonb
+update public.profiles
+set role = 'admin', updated_at = now()
 where email = 'tu-admin@dominio.com';
 ```
 
@@ -88,6 +89,7 @@ Abrir [http://localhost:3000](http://localhost:3000).
 
 ## Portal cliente (sesión obligatoria)
 - Registro de cuenta cliente: `/portal/register` (también disponible en `/registro`).
+- El registro solicita nombre, correo, teléfono y contraseña.
 - Login portal: `/portal/login`.
 - Rutas privadas del portal (`/portal`, `/portal/*`) solo accesibles con sesión activa.
 - El enlace de `Portal` en navegación solo se muestra cuando el usuario está autenticado.

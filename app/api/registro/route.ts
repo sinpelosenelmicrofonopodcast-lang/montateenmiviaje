@@ -3,8 +3,9 @@ import { z } from "zod";
 import { registerCustomerService } from "@/lib/raffles-service";
 
 const schema = z.object({
-  fullName: z.string().min(2),
-  email: z.string().email(),
+  fullName: z.string().trim().min(2),
+  email: z.string().trim().email(),
+  phone: z.string().trim().min(7),
   authUserId: z.string().uuid().optional()
 });
 

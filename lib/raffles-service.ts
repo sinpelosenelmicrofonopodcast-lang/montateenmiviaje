@@ -4,6 +4,7 @@ import { Customer, Raffle, RaffleEntry, RaffleEntryStatus } from "@/lib/types";
 export interface RegisterCustomerInput {
   fullName: string;
   email: string;
+  phone: string;
   authUserId?: string;
 }
 
@@ -33,6 +34,7 @@ interface AppCustomerRow {
   full_name: string;
   email: string;
   is_registered: boolean;
+  phone: string | null;
   created_at: string;
 }
 
@@ -76,6 +78,7 @@ function mapCustomer(row: AppCustomerRow): Customer {
     fullName: row.full_name,
     email: row.email,
     isRegistered: row.is_registered,
+    phone: row.phone ?? undefined,
     preferences: [],
     notes: ["Registro Supabase"],
     pipelineStage: "lead",
@@ -137,6 +140,37 @@ function isUniqueViolation(error: unknown) {
 
   const pgError = error as { code?: string };
   return pgError.code === "23505";
+}
+
+async function syncProfileFromRegistration(input: { authUserId: string; email: string; phone: string }) {
+  const supabase = getSupabaseAdminClient();
+  const basePayload = {
+    id: input.authUserId,
+    email: normalizeEmail(input.email),
+    role: "user"
+  };
+
+  const withPhone = await supabase.from("profiles").upsert(
+    {
+      ...basePayload,
+      phone: input.phone.trim()
+    },
+    { onConflict: "id" }
+  );
+
+  if (!withPhone.error) {
+    return;
+  }
+
+  if (withPhone.error.code === "42703" || /column .*phone/i.test(withPhone.error.message)) {
+    const fallback = await supabase.from("profiles").upsert(basePayload, { onConflict: "id" });
+    if (!fallback.error) {
+      return;
+    }
+    throw new Error(`No se pudo sincronizar perfil: ${fallback.error.message}`);
+  }
+
+  throw new Error(`No se pudo sincronizar perfil: ${withPhone.error.message}`);
 }
 
 async function getRaffleRowOrThrow(raffleId: string) {
@@ -264,6 +298,7 @@ export async function registerCustomerService(input: RegisterCustomerInput) {
   const payload: Record<string, unknown> = {
     full_name: input.fullName.trim(),
     email: normalizeEmail(input.email),
+    phone: input.phone.trim(),
     is_registered: true
   };
   if (input.authUserId) {
@@ -278,6 +313,14 @@ export async function registerCustomerService(input: RegisterCustomerInput) {
 
   if (error || !data) {
     throw new Error(`No se pudo registrar usuario: ${error?.message ?? "sin datos"}`);
+  }
+
+  if (input.authUserId) {
+    await syncProfileFromRegistration({
+      authUserId: input.authUserId,
+      email: input.email,
+      phone: input.phone
+    });
   }
 
   return mapCustomer(data);
