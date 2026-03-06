@@ -1,12 +1,15 @@
 import { TripCard } from "@/components/trip-card";
-import { trips } from "@/lib/data";
+import { listTripsService } from "@/lib/catalog-service";
 
 interface ViajesPageProps {
   searchParams: Promise<{ destination?: string; category?: string; month?: string }>;
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function ViajesPage({ searchParams }: ViajesPageProps) {
   const params = await searchParams;
+  const trips = await listTripsService({ publishedOnly: true });
   const destination = params.destination?.toLowerCase() ?? "";
   const category = params.category ?? "";
   const month = params.month ?? "";

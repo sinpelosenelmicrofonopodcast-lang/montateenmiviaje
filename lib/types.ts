@@ -47,6 +47,8 @@ export interface Trip {
   packages: TripPackage[];
   addons: { id: string; name: string; price: number }[];
   hotels?: string[];
+  publishStatus?: "draft" | "published" | "unpublished";
+  featured?: boolean;
 }
 
 export interface Testimonial {
@@ -103,7 +105,7 @@ export interface PaymentRecord {
 
 export interface DocumentRecord {
   id: string;
-  entityType: "trip" | "booking" | "customer";
+  entityType: "trip" | "booking" | "customer" | "proposal";
   entityId: string;
   title: string;
   language: "es" | "en";
@@ -127,7 +129,7 @@ export interface AutomationRun {
   ruleName: string;
   channel: "email" | "whatsapp";
   recipient: string;
-  entityType: "booking" | "payment" | "trip";
+  entityType: "booking" | "payment" | "trip" | "proposal";
   entityId: string;
   status: "queued" | "sent";
   scheduledAt: string;
@@ -154,6 +156,20 @@ export interface ReportSnapshot {
   pendingAmount: number;
   paidBookings: number;
   conversionRate: number;
+}
+
+export interface Offer {
+  id: string;
+  title: string;
+  description: string;
+  code: string;
+  discountType: "fixed" | "percent";
+  value: number;
+  tripSlug?: string;
+  startsAt?: string;
+  endsAt?: string;
+  active: boolean;
+  createdAt: string;
 }
 
 export type CustomRequestStatus =

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  appendEmailLog,
-  createCustomProposal,
-  getCustomTripRequest,
-  markCustomRequestReviewing
-} from "@/lib/booking-store";
+  appendEmailLogService,
+  createCustomProposalService,
+  getCustomTripRequestService,
+  markCustomRequestReviewingService
+} from "@/lib/runtime-service";
 import { sendEmailNotification } from "@/lib/email";
 
 const createProposalSchema = z.object({
@@ -28,12 +28,12 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    markCustomRequestReviewing(id);
+    await markCustomRequestReviewingService(id);
 
     const payload = createProposalSchema.parse(await request.json());
-    const proposal = createCustomProposal(id, payload);
+    const proposal = await createCustomProposalService(id, payload);
 
-    const customRequest = getCustomTripRequest(id);
+    const customRequest = await getCustomTripRequestService(id);
     if (!customRequest) {
       return NextResponse.json({ message: "Solicitud no encontrada" }, { status: 404 });
     }
@@ -50,7 +50,7 @@ export async function POST(
       html: `<p>Hola <strong>${customRequest.customerName}</strong>,</p><p>Tu paquete personalizado ya está listo.</p><p><a href="${pageLink}">Ver propuesta</a></p><p><a href="${pdfLink}">Descargar PDF</a></p>`
     });
 
-    appendEmailLog(emailLog);
+    await appendEmailLogService(emailLog);
 
     return NextResponse.json({
       ok: true,

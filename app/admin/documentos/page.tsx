@@ -1,9 +1,9 @@
-import { listDocuments } from "@/lib/booking-store";
+import { listDocumentsService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
-export default function AdminDocumentosPage() {
-  const docs = listDocuments();
+export default async function AdminDocumentosPage() {
+  const docs = await listDocumentsService();
 
   return (
     <main className="container section">

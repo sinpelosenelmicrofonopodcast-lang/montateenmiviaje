@@ -1,11 +1,17 @@
 import Link from "next/link";
 import { formatMoney } from "@/lib/format";
-import { getDashboardSnapshot, listAutomationRuns, listBookings, listPayments } from "@/lib/booking-store";
+import {
+  getDashboardSnapshotService,
+  listAutomationRunsService,
+  listBookingsService,
+  listPaymentsService
+} from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
 const modules = [
   { title: "Viajes", href: "/admin/viajes", helper: "Builder, publicación y brochure" },
+  { title: "Ofertas", href: "/admin/ofertas", helper: "Códigos y promociones activas" },
   { title: "Solicitudes", href: "/admin/solicitudes", helper: "Paquetes a medida por cliente" },
   { title: "Sorteos", href: "/admin/sorteos", helper: "Gratis o pago por entrada" },
   { title: "Reservas", href: "/admin/reservas", helper: "Pipeline comercial completo" },
@@ -18,11 +24,13 @@ const modules = [
   { title: "Configuración", href: "/admin/configuracion", helper: "Roles e integraciones" }
 ];
 
-export default function AdminOverviewPage() {
-  const snapshot = getDashboardSnapshot();
-  const bookings = listBookings();
-  const payments = listPayments();
-  const runs = listAutomationRuns();
+export default async function AdminOverviewPage() {
+  const [snapshot, bookings, payments, runs] = await Promise.all([
+    getDashboardSnapshotService(),
+    listBookingsService(),
+    listPaymentsService(),
+    listAutomationRunsService()
+  ]);
 
   const cards = [
     { title: "Ingresos cobrados", value: formatMoney(snapshot.totalRevenue) },

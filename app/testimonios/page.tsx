@@ -1,6 +1,10 @@
-import { testimonials } from "@/lib/data";
+import { listTestimonialsService } from "@/lib/catalog-service";
 
-export default function TestimoniosPage() {
+export const dynamic = "force-dynamic";
+
+export default async function TestimoniosPage() {
+  const testimonials = await listTestimonialsService({ approvedOnly: true });
+
   return (
     <main className="container section">
       <header className="page-header">

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createBooking } from "@/lib/booking-store";
-import { getTripBySlug } from "@/lib/data";
+import { getTripBySlugService } from "@/lib/catalog-service";
+import { createBookingWithTripService } from "@/lib/runtime-service";
 
 const createBookingSchema = z.object({
   customerName: z.string().min(2),
@@ -15,7 +15,7 @@ const createBookingSchema = z.object({
 export async function POST(request: Request) {
   try {
     const payload = createBookingSchema.parse(await request.json());
-    const trip = getTripBySlug(payload.tripSlug);
+    const trip = await getTripBySlugService(payload.tripSlug, { includeUnpublished: true });
 
     if (!trip) {
       return NextResponse.json({ message: "Viaje no encontrado" }, { status: 404 });
@@ -31,14 +31,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Monto de depósito inválido" }, { status: 400 });
     }
 
-    const booking = createBooking({
+    const booking = await createBookingWithTripService({
       customerName: payload.customerName,
       customerEmail: payload.customerEmail,
       tripSlug: payload.tripSlug,
       roomType: payload.roomType,
       travelers: payload.travelers,
       depositAmount: payload.amount
-    });
+    }, trip);
 
     return NextResponse.json({
       bookingId: booking.id,

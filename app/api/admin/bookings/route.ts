@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { listBookings, updateBookingStage } from "@/lib/booking-store";
+import { listBookingsService, updateBookingStageService } from "@/lib/runtime-service";
 
 const updateSchema = z.object({
   bookingId: z.string().uuid(),
@@ -17,13 +17,14 @@ const updateSchema = z.object({
 });
 
 export async function GET() {
-  return NextResponse.json({ bookings: listBookings() });
+  const bookings = await listBookingsService();
+  return NextResponse.json({ bookings });
 }
 
 export async function PATCH(request: Request) {
   try {
     const payload = updateSchema.parse(await request.json());
-    const booking = updateBookingStage(payload.bookingId, payload.stage);
+    const booking = await updateBookingStageService(payload.bookingId, payload.stage);
 
     if (!booking) {
       return NextResponse.json({ message: "Reserva no encontrada" }, { status: 404 });

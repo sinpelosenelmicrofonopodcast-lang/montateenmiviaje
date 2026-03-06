@@ -1,6 +1,8 @@
-import { checklistTemplate } from "@/lib/data";
+import { listChecklistItemsService } from "@/lib/catalog-service";
 
-export default function PortalChecklistPage() {
+export default async function PortalChecklistPage() {
+  const checklistTemplate = await listChecklistItemsService();
+
   return (
     <main className="container section">
       <header className="page-header">

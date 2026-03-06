@@ -1,5 +1,5 @@
-import { getPortalBundle } from "@/lib/booking-store";
 import { formatMoney } from "@/lib/format";
+import { getPortalBundleService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +9,7 @@ interface PortalPagosPageProps {
 
 export default async function PortalPagosPage({ searchParams }: PortalPagosPageProps) {
   const params = await searchParams;
-  const bundle = getPortalBundle(params.email);
+  const bundle = await getPortalBundleService(params.email);
 
   return (
     <main className="container section">

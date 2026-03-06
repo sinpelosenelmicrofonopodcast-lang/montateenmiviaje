@@ -1,4 +1,4 @@
-import { getPortalBundle } from "@/lib/booking-store";
+import { getPortalBundleService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +8,7 @@ interface PortalDocumentosPageProps {
 
 export default async function PortalDocumentosPage({ searchParams }: PortalDocumentosPageProps) {
   const params = await searchParams;
-  const bundle = getPortalBundle(params.email);
+  const bundle = await getPortalBundleService(params.email);
 
   return (
     <main className="container section">

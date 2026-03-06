@@ -4,6 +4,7 @@ import Link from "next/link";
 const links = [
   { href: "/", label: "Home" },
   { href: "/viajes", label: "Viajes" },
+  { href: "/ofertas", label: "Ofertas" },
   { href: "/sorteos", label: "Sorteos" },
   { href: "/registro", label: "Registro" },
   { href: "/solicitar-viaje", label: "Solicitar viaje" },
@@ -11,7 +12,6 @@ const links = [
   { href: "/galeria", label: "Galería" },
   { href: "/about", label: "About" },
   { href: "/contacto", label: "Contacto" },
-  { href: "/admin", label: "Admin" },
   { href: "/portal", label: "Portal" }
 ];
 

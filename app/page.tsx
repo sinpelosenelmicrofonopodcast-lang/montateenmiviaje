@@ -1,8 +1,17 @@
 import Link from "next/link";
 import { TripCard } from "@/components/trip-card";
-import { testimonials, trips } from "@/lib/data";
+import { listOffersService, listTestimonialsService, listTripsService } from "@/lib/catalog-service";
+import { formatMoney } from "@/lib/format";
 
-export default function HomePage() {
+export const dynamic = "force-dynamic";
+
+export default async function HomePage() {
+  const [trips, testimonials, offers] = await Promise.all([
+    listTripsService({ publishedOnly: true, featuredOnly: true }),
+    listTestimonialsService({ approvedOnly: true }),
+    listOffersService({ activeOnly: true })
+  ]);
+
   return (
     <main>
       <section className="hero container">
@@ -56,6 +65,33 @@ export default function HomePage() {
         <div className="trip-grid">
           {trips.map((trip) => (
             <TripCard key={trip.id} trip={trip} />
+          ))}
+        </div>
+      </section>
+
+      <section className="section container">
+        <div className="section-heading">
+          <h2>Ofertas activas</h2>
+          <Link href="/ofertas" className="button-outline">
+            Ver ofertas
+          </Link>
+        </div>
+        <div className="trip-grid">
+          {offers.map((offer) => (
+            <article key={offer.id} className="card">
+              <p className="chip">{offer.discountType === "percent" ? "Descuento %" : "Descuento fijo"}</p>
+              <h3>{offer.title}</h3>
+              <p>{offer.description}</p>
+              <p>
+                Código: <strong>{offer.code}</strong>
+              </p>
+              <p>
+                Valor:{" "}
+                <strong>
+                  {offer.discountType === "percent" ? `${offer.value}%` : formatMoney(offer.value)}
+                </strong>
+              </p>
+            </article>
           ))}
         </div>
       </section>

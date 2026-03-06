@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { listCustomTripRequests } from "@/lib/booking-store";
 import { formatMoney } from "@/lib/format";
+import { listCustomTripRequestsService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
-export default function AdminSolicitudesPage() {
-  const requests = listCustomTripRequests();
+export default async function AdminSolicitudesPage() {
+  const requests = await listCustomTripRequestsService();
 
   return (
     <main className="container section">

@@ -2,14 +2,14 @@ import fs from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { getCustomRequestBundle } from "@/lib/booking-store";
+import { createDocumentRecordService, getCustomRequestBundleService } from "@/lib/runtime-service";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const bundle = getCustomRequestBundle(id);
+  const bundle = await getCustomRequestBundleService(id);
 
   if (!bundle.request || !bundle.proposal) {
     return NextResponse.json({ message: "Propuesta no encontrada" }, { status: 404 });
@@ -91,6 +91,16 @@ export async function GET(
   page.drawText(`Link cliente: ${proposalLink}`, { x: 48, y: 82, size: 9, font: bodyFont, color: rgb(0.35, 0.35, 0.35) });
 
   const bytes = await pdf.save();
+
+  await createDocumentRecordService({
+    entityType: "proposal",
+    entityId: id,
+    title: `${bundle.proposal.title} PDF`,
+    language: "es",
+    audience: "client",
+    includePrices: true,
+    downloadUrl: request.url
+  });
 
   return new NextResponse(Buffer.from(bytes), {
     status: 200,

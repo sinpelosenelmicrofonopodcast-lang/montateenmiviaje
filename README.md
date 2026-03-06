@@ -4,6 +4,8 @@ Aplicación SaaS para viajes grupales premium (website + admin + portal cliente)
 
 ## Incluye
 - Website pública premium (Home, Viajes, Detalle, Reservar, Testimonios, Galería, Contacto).
+- Dashboard público en `/dashboard`.
+- Admin privado en rutas ocultas `/dashboard/admin/*`.
 - Dashboard administrativo completo V1.
 - Builder de paquetes por viaje (`/admin/viajes/[slug]/builder`).
 - CRM de clientes y pipeline de reservas.
@@ -24,6 +26,11 @@ Aplicación SaaS para viajes grupales premium (website + admin + portal cliente)
   - Countdown público al anuncio del ganador.
   - Sorteo interno tipo lotería (auto al llegar la hora o manual desde admin).
   - Cliente participa y admin confirma/rechaza entradas.
+- Catálogo real en Supabase (sin mocks):
+  - Viajes + builder (itinerario, paquetes, add-ons, políticas, hoteles, estado publicación).
+  - Testimonios administrables.
+  - Galería (álbumes + media).
+  - Ofertas/códigos promocionales.
 - Esquema SQL inicial para Supabase.
 
 ## Requisitos
@@ -46,15 +53,20 @@ Copia `.env.example` a `.env.local` y completa:
 2. Ejecuta las migraciones SQL:
    - `supabase/migrations/001_init.sql`
    - `supabase/migrations/002_runtime_raffles.sql`
+   - `supabase/migrations/003_runtime_catalog.sql`
+   - `supabase/migrations/004_runtime_operations.sql`
+   - `supabase/migrations/005_profiles_admin_auth.sql`
 3. Configura en Vercel/local:
    - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
 
 ## Admin Auth (rol admin)
-- Las rutas `/admin/*` y `/api/admin/*` están protegidas por middleware.
+- Las rutas `/dashboard/admin/*`, `/admin/*` (legacy) y `/api/admin/*` están protegidas por middleware.
 - Login admin: `/admin/login` (Supabase Auth email + password).
-- Solo entra un usuario con `app_metadata.role = "admin"` o `app_metadata.roles` que incluya `"admin"`.
-- Si el rol no es admin, redirige a `/admin/forbidden`.
+- El control de acceso principal usa `public.profiles.role`.
+- Si el rol no es admin, redirige a `/`.
+- El enlace de Admin no se muestra en navegación pública.
 
 Ejemplo SQL para asignar rol admin en Supabase (SQL Editor):
 
@@ -94,14 +106,23 @@ Abrir [http://localhost:3000](http://localhost:3000).
 - `PATCH /api/admin/raffles/:id`
 - `POST /api/admin/raffles/:id/draw`
 - `PATCH /api/admin/raffles/entries/:entryId`
+- `GET/POST /api/admin/trips`
+- `PATCH /api/admin/trips/:id`
+- `POST /api/admin/trips/:id/packages`
+- `POST /api/admin/trips/:id/days`
+- `POST /api/admin/trips/:id/addons`
+- `GET/POST /api/admin/testimonials`
+- `PATCH /api/admin/testimonials/:id`
+- `GET/POST /api/admin/gallery/albums`
+- `POST /api/admin/gallery/media`
+- `GET/POST /api/admin/offers`
+- `PATCH /api/admin/offers/:id`
 - `GET /api/admin/automations`
 - `GET /api/pdf/trip/:slug?audience=client|internal&lang=es|en&showPrices=true|false`
 - `GET /api/pdf/custom-proposal/:id`
 
 ## Notas importantes
-- Esta versión V1 usa almacenamiento en memoria para reservas/pagos/CRM (`lib/booking-store.ts`).
-- Registro de usuarios y módulo de sorteos se conectan a Supabase cuando hay variables configuradas.
-- Si faltan variables de Supabase, sorteos/registro usan fallback local en memoria.
-- En producción, conectar persistencia Supabase para `bookings`, `payments`, `customers`, `documents`.
+- Registro, sorteos, catálogo, reservas, pagos, CRM, solicitudes personalizadas, documentos y reportes se conectan a Supabase.
+- Todo el contenido operativo se gestiona desde dashboard admin (sin mocks en runtime).
 - Validar firma de webhook de PayPal antes de producción.
 - Stripe está removido en esta rama; pagos solo por PayPal.

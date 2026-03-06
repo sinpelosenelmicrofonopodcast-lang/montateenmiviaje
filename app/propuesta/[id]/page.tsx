@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { ProposalResponseForm } from "@/components/custom/proposal-response-form";
-import { getCustomRequestBundle } from "@/lib/booking-store";
 import { formatMoney } from "@/lib/format";
+import { getCustomRequestBundleService } from "@/lib/runtime-service";
 
 interface PropuestaPageProps {
   params: Promise<{ id: string }>;
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function PropuestaPage({ params }: PropuestaPageProps) {
   const { id } = await params;
-  const bundle = getCustomRequestBundle(id);
+  const bundle = await getCustomRequestBundleService(id);
 
   if (!bundle.request) {
     notFound();

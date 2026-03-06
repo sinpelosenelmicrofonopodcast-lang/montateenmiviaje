@@ -1,0 +1,47 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { createTripService, listTripsService } from "@/lib/catalog-service";
+
+const tripSchema = z.object({
+  slug: z.string().min(2),
+  title: z.string().min(3),
+  destination: z.string().min(2),
+  category: z.enum(["Luxury", "Adventure", "Family", "Romantic", "Budget"]),
+  startDate: z.string().min(8),
+  endDate: z.string().min(8),
+  availableSpots: z.number().int().min(0),
+  totalSpots: z.number().int().min(1),
+  heroImage: z.string().url(),
+  summary: z.string().min(10),
+  includes: z.array(z.string()).default([]),
+  excludes: z.array(z.string()).default([]),
+  policies: z.array(z.string()).default([]),
+  requirements: z.array(z.string()).default([]),
+  hotels: z.array(z.string()).default([]),
+  publishStatus: z.enum(["draft", "published", "unpublished"]),
+  featured: z.boolean().default(false)
+});
+
+export async function GET() {
+  try {
+    const trips = await listTripsService();
+    return NextResponse.json({ trips });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Error interno";
+    return NextResponse.json({ message }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const payload = tripSchema.parse(await request.json());
+    const trip = await createTripService(payload);
+    return NextResponse.json({ ok: true, trip });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ message: "Payload inválido", issues: error.issues }, { status: 400 });
+    }
+    const message = error instanceof Error ? error.message : "Error interno";
+    return NextResponse.json({ message }, { status: 500 });
+  }
+}

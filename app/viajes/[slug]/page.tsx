@@ -1,22 +1,30 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getTripBySlug } from "@/lib/data";
+import { getTripBySlugService } from "@/lib/catalog-service";
 import { availabilityPercent, formatDateRange, formatMoney } from "@/lib/format";
 
 interface TripDetailPageProps {
   params: Promise<{ slug: string }>;
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function TripDetailPage({ params }: TripDetailPageProps) {
   const { slug } = await params;
-  const trip = getTripBySlug(slug);
+  const trip = await getTripBySlugService(slug);
 
   if (!trip) {
     notFound();
   }
 
   const availability = availabilityPercent(trip.availableSpots, trip.totalSpots);
+  const minPrice = trip.packages.length > 0
+    ? Math.min(...trip.packages.map((pkg) => pkg.pricePerPerson))
+    : null;
+  const minDeposit = trip.packages.length > 0
+    ? Math.min(...trip.packages.map((pkg) => pkg.deposit))
+    : null;
 
   return (
     <main className="container section">
@@ -78,10 +86,10 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
           <div className="card">
             <h3>Reserva</h3>
             <p>
-              <strong>Desde {formatMoney(Math.min(...trip.packages.map((pkg) => pkg.pricePerPerson)))}</strong>
+              <strong>{minPrice ? `Desde ${formatMoney(minPrice)}` : "Precio próximamente"}</strong>
             </p>
             <p>
-              Depósito desde {formatMoney(Math.min(...trip.packages.map((pkg) => pkg.deposit)))}
+              {minDeposit ? `Depósito desde ${formatMoney(minDeposit)}` : "Depósito por definir"}
             </p>
             <div className="availability-row">
               <span>
@@ -91,9 +99,13 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
                 <div className="availability-fill" style={{ width: `${availability}%` }} />
               </div>
             </div>
-            <Link href={`/reservar/${trip.slug}`} className="button-primary" style={{ marginTop: "16px" }}>
-              Reservar con PayPal
-            </Link>
+            {trip.packages.length > 0 ? (
+              <Link href={`/reservar/${trip.slug}`} className="button-primary" style={{ marginTop: "16px" }}>
+                Reservar con PayPal
+              </Link>
+            ) : (
+              <p className="muted">Este viaje aún no tiene paquetes configurados.</p>
+            )}
             <a
               href={`/api/pdf/trip/${trip.slug}?audience=client&lang=es&showPrices=true`}
               className="button-outline"

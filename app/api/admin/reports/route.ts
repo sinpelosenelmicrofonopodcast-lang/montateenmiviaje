@@ -1,10 +1,20 @@
 import { NextResponse } from "next/server";
-import { getDashboardSnapshot, getPipelineSummary, getTripRevenueRows } from "@/lib/booking-store";
+import {
+  getDashboardSnapshotService,
+  getPipelineSummaryService,
+  getTripRevenueRowsService
+} from "@/lib/runtime-service";
 
 export async function GET() {
+  const [snapshot, pipeline, revenueByTrip] = await Promise.all([
+    getDashboardSnapshotService(),
+    getPipelineSummaryService(),
+    getTripRevenueRowsService()
+  ]);
+
   return NextResponse.json({
-    snapshot: getDashboardSnapshot(),
-    pipeline: getPipelineSummary(),
-    revenueByTrip: getTripRevenueRows()
+    snapshot,
+    pipeline,
+    revenueByTrip
   });
 }

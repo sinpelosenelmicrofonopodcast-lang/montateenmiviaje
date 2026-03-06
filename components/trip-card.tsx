@@ -8,7 +8,9 @@ interface TripCardProps {
 }
 
 export function TripCard({ trip }: TripCardProps) {
-  const lowestPrice = Math.min(...trip.packages.map((pkg) => pkg.pricePerPerson));
+  const lowestPrice = trip.packages.length > 0
+    ? Math.min(...trip.packages.map((pkg) => pkg.pricePerPerson))
+    : null;
   const availability = availabilityPercent(trip.availableSpots, trip.totalSpots);
 
   return (
@@ -32,7 +34,7 @@ export function TripCard({ trip }: TripCardProps) {
           </div>
         </div>
         <div className="trip-card-footer">
-          <strong>Desde {formatMoney(lowestPrice)}</strong>
+          <strong>{lowestPrice ? `Desde ${formatMoney(lowestPrice)}` : "Precio próximamente"}</strong>
           <Link href={`/viajes/${trip.slug}`} className="button-outline">
             Ver detalle
           </Link>

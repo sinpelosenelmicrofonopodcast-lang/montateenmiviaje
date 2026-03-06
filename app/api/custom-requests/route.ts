@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createCustomTripRequest, listCustomTripRequests } from "@/lib/booking-store";
+import { createCustomTripRequestService, listCustomTripRequestsService } from "@/lib/runtime-service";
 
 const createSchema = z.object({
   customerName: z.string().min(2),
@@ -15,13 +15,14 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  return NextResponse.json({ requests: listCustomTripRequests() });
+  const requests = await listCustomTripRequestsService();
+  return NextResponse.json({ requests });
 }
 
 export async function POST(request: Request) {
   try {
     const payload = createSchema.parse(await request.json());
-    const customRequest = createCustomTripRequest(payload);
+    const customRequest = await createCustomTripRequestService(payload);
     return NextResponse.json({
       requestId: customRequest.id,
       status: customRequest.status,

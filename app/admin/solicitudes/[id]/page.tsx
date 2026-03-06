@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminProposalForm } from "@/components/custom/admin-proposal-form";
-import { getCustomRequestBundle, listEmailLogs } from "@/lib/booking-store";
+import { getCustomRequestBundleService, listEmailLogsService } from "@/lib/runtime-service";
 
 interface AdminSolicitudDetailPageProps {
   params: Promise<{ id: string }>;
@@ -11,13 +11,13 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminSolicitudDetailPage({ params }: AdminSolicitudDetailPageProps) {
   const { id } = await params;
-  const bundle = getCustomRequestBundle(id);
+  const bundle = await getCustomRequestBundleService(id);
 
   if (!bundle.request) {
     notFound();
   }
 
-  const relatedEmails = listEmailLogs().filter((item) => item.to === bundle.request?.customerEmail);
+  const relatedEmails = (await listEmailLogsService()).filter((item) => item.to === bundle.request?.customerEmail);
 
   return (
     <main className="container section">

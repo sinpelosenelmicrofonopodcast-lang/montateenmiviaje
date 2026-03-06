@@ -1,10 +1,13 @@
-import { listAutomationRuns } from "@/lib/booking-store";
-import { automationRules } from "@/lib/data";
+import { listAutomationRulesService } from "@/lib/catalog-service";
+import { listAutomationRunsService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
-export default function AdminAutomatizacionesPage() {
-  const runs = listAutomationRuns();
+export default async function AdminAutomatizacionesPage() {
+  const [runs, automationRules] = await Promise.all([
+    listAutomationRunsService(),
+    listAutomationRulesService()
+  ]);
 
   return (
     <main className="container section">

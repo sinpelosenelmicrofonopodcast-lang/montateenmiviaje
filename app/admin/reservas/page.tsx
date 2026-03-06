@@ -1,5 +1,5 @@
-import { getPipelineSummary, listBookings } from "@/lib/booking-store";
 import { formatMoney } from "@/lib/format";
+import { getPipelineSummaryService, listBookingsService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
@@ -14,9 +14,8 @@ const stageLabels: Record<string, string> = {
   cancelado: "Cancelado"
 };
 
-export default function AdminReservasPage() {
-  const pipeline = getPipelineSummary();
-  const bookings = listBookings();
+export default async function AdminReservasPage() {
+  const [pipeline, bookings] = await Promise.all([getPipelineSummaryService(), listBookingsService()]);
 
   return (
     <main className="container section">

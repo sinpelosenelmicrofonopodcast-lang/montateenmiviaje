@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { listCustomers } from "@/lib/booking-store";
+import { listCustomersService } from "@/lib/runtime-service";
 
 export async function GET() {
-  return NextResponse.json({ customers: listCustomers() });
+  const customers = await listCustomersService();
+  return NextResponse.json({ customers });
 }

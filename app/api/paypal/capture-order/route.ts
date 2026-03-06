@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { capturePaypalOrder } from "@/lib/paypal";
-import { getBooking, markBookingPaidByOrder } from "@/lib/booking-store";
+import { getBookingService, markBookingPaidByOrderService } from "@/lib/runtime-service";
 
 const captureOrderSchema = z.object({
   bookingId: z.string().uuid(),
@@ -11,7 +11,7 @@ const captureOrderSchema = z.object({
 export async function POST(request: Request) {
   try {
     const payload = captureOrderSchema.parse(await request.json());
-    const booking = getBooking(payload.bookingId);
+    const booking = await getBookingService(payload.bookingId);
 
     if (!booking) {
       return NextResponse.json({ message: "Reserva no encontrada" }, { status: 404 });
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const updatedBooking = markBookingPaidByOrder(payload.orderId);
+    const updatedBooking = await markBookingPaidByOrderService(payload.orderId);
 
     return NextResponse.json({
       ok: true,

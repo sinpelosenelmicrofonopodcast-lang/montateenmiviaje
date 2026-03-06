@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { respondCustomProposal } from "@/lib/booking-store";
+import { respondCustomProposalService } from "@/lib/runtime-service";
 
 const schema = z.object({
   action: z.enum(["accept", "changes"]),
@@ -14,7 +14,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const payload = schema.parse(await request.json());
-    const result = respondCustomProposal(id, payload.action, payload.message);
+    const result = await respondCustomProposalService(id, payload.action, payload.message);
 
     return NextResponse.json({
       ok: true,

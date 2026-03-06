@@ -2,8 +2,8 @@ import fs from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
 import { PDFFont, PDFDocument, PDFPage, StandardFonts, rgb } from "pdf-lib";
-import { createDocumentRecord } from "@/lib/booking-store";
-import { getTripBySlug } from "@/lib/data";
+import { getTripBySlugService } from "@/lib/catalog-service";
+import { createDocumentRecordService } from "@/lib/runtime-service";
 
 function wrapLinesByWidth(text: string, font: PDFFont, size: number, maxWidth: number) {
   const words = text.split(/\s+/);
@@ -60,7 +60,7 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params;
-  const trip = getTripBySlug(slug);
+  const trip = await getTripBySlugService(slug, { includeUnpublished: true });
 
   if (!trip) {
     return NextResponse.json({ message: "Viaje no encontrado" }, { status: 404 });
@@ -182,7 +182,7 @@ export async function GET(
   rightY -= 24;
 
   const basePackage = trip.packages[0];
-  if (showPrices) {
+  if (showPrices && basePackage) {
     rightY = drawParagraph(
       page,
       `From USD ${basePackage.pricePerPerson}`,
@@ -204,6 +204,17 @@ export async function GET(
       rgb(0.1, 0.1, 0.1)
     ) - 4;
     rightY = drawParagraph(page, basePackage.paymentPlan, rightX, rightY, bodyFont, 10, rightColWidth, rgb(0.25, 0.25, 0.25)) - 8;
+  } else if (!basePackage) {
+    rightY = drawParagraph(
+      page,
+      lang === "es" ? "Paquetes en configuración" : "Packages in setup",
+      rightX,
+      rightY,
+      bodyFont,
+      11,
+      rightColWidth,
+      rgb(0.25, 0.25, 0.25)
+    ) - 4;
   } else {
     rightY = drawParagraph(
       page,
@@ -217,7 +228,7 @@ export async function GET(
     ) - 4;
   }
 
-  if (audience === "internal") {
+  if (audience === "internal" && basePackage) {
     const estimatedCost = Math.round(basePackage.pricePerPerson * 0.72);
     const margin = basePackage.pricePerPerson - estimatedCost;
     rightY = drawParagraph(
@@ -282,7 +293,7 @@ export async function GET(
 
   const bytes = await pdf.save();
 
-  createDocumentRecord({
+  await createDocumentRecordService({
     entityType: "trip",
     entityId: trip.id,
     title: `${trip.title} PDF`,

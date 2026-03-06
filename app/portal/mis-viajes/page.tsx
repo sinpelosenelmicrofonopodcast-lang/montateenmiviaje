@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { getPortalBundle } from "@/lib/booking-store";
-import { getTripBySlug } from "@/lib/data";
+import { listTripsService } from "@/lib/catalog-service";
 import { formatDateRange, formatMoney } from "@/lib/format";
+import { getPortalBundleService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +11,8 @@ interface PortalMisViajesPageProps {
 
 export default async function PortalMisViajesPage({ searchParams }: PortalMisViajesPageProps) {
   const params = await searchParams;
-  const bundle = getPortalBundle(params.email);
+  const [bundle, trips] = await Promise.all([getPortalBundleService(params.email), listTripsService()]);
+  const tripMap = new Map(trips.map((trip) => [trip.slug, trip]));
 
   return (
     <main className="container section">
@@ -22,7 +23,7 @@ export default async function PortalMisViajesPage({ searchParams }: PortalMisVia
 
       <section className="stack-grid">
         {bundle.bookings.map((booking) => {
-          const trip = getTripBySlug(booking.tripSlug);
+          const trip = tripMap.get(booking.tripSlug);
           if (!trip) {
             return null;
           }

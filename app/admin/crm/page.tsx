@@ -1,10 +1,10 @@
-import { listCustomers } from "@/lib/booking-store";
 import { formatMoney } from "@/lib/format";
+import { listCustomersService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
-export default function AdminCrmPage() {
-  const customers = listCustomers();
+export default async function AdminCrmPage() {
+  const customers = await listCustomersService();
 
   return (
     <main className="container section">

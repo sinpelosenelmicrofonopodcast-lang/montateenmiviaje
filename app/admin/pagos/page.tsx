@@ -1,10 +1,10 @@
-import { listPayments } from "@/lib/booking-store";
 import { formatMoney } from "@/lib/format";
+import { listPaymentsService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
-export default function AdminPagosPage() {
-  const payments = listPayments();
+export default async function AdminPagosPage() {
+  const payments = await listPaymentsService();
 
   return (
     <main className="container section">

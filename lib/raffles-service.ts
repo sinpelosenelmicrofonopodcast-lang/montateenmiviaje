@@ -1,20 +1,30 @@
-import {
-  createRaffle,
-  drawRaffleWinner,
-  DrawRaffleWinnerResult,
-  enterRaffle,
-  getRaffleById,
-  listAvailableRaffleNumbers,
-  listRaffleEntries,
-  listRaffles,
-  registerCustomer,
-  RegisterCustomerInput,
-  updateRaffleEntryStatus,
-  updateRaffleStatus,
-  CreateRaffleInput
-} from "@/lib/booking-store";
 import { hasSupabaseConfig, getSupabaseAdminClient } from "@/lib/supabase-admin";
 import { Customer, Raffle, RaffleEntry, RaffleEntryStatus } from "@/lib/types";
+
+export interface RegisterCustomerInput {
+  fullName: string;
+  email: string;
+}
+
+export interface CreateRaffleInput {
+  title: string;
+  description: string;
+  isFree: boolean;
+  entryFee: number;
+  paymentInstructions: string;
+  requirements: string;
+  prize: string;
+  startDate: string;
+  endDate: string;
+  drawAt: string;
+  numberPoolSize: number;
+  status: Raffle["status"];
+}
+
+export interface DrawRaffleWinnerResult {
+  raffle: Raffle;
+  winnerEntry: RaffleEntry | null;
+}
 
 interface AppCustomerRow {
   id: string;
@@ -109,6 +119,12 @@ function mapRaffleEntry(row: AppRaffleEntryRow): RaffleEntry {
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
+}
+
+function ensureConfigured() {
+  if (!hasSupabaseConfig()) {
+    throw new Error("Supabase no está configurado");
+  }
 }
 
 function isUniqueViolation(error: unknown) {
@@ -239,9 +255,7 @@ async function runDueRaffleDrawsSupabase() {
 }
 
 export async function registerCustomerService(input: RegisterCustomerInput) {
-  if (!hasSupabaseConfig()) {
-    return registerCustomer(input);
-  }
+  ensureConfigured();
 
   const supabase = getSupabaseAdminClient();
   const payload = {
@@ -264,9 +278,7 @@ export async function registerCustomerService(input: RegisterCustomerInput) {
 }
 
 export async function listRafflesService(options?: { includeDrafts?: boolean; includeClosed?: boolean }) {
-  if (!hasSupabaseConfig()) {
-    return listRaffles(options);
-  }
+  ensureConfigured();
 
   await runDueRaffleDrawsSupabase();
 
@@ -293,9 +305,7 @@ export async function listRafflesService(options?: { includeDrafts?: boolean; in
 }
 
 export async function getRaffleByIdService(raffleId: string) {
-  if (!hasSupabaseConfig()) {
-    return getRaffleById(raffleId);
-  }
+  ensureConfigured();
 
   await runDueRaffleDrawsSupabase();
   const supabase = getSupabaseAdminClient();
@@ -317,9 +327,7 @@ export async function getRaffleByIdService(raffleId: string) {
 }
 
 export async function listRaffleEntriesService(raffleId?: string) {
-  if (!hasSupabaseConfig()) {
-    return listRaffleEntries(raffleId);
-  }
+  ensureConfigured();
 
   await runDueRaffleDrawsSupabase();
   const supabase = getSupabaseAdminClient();
@@ -340,9 +348,7 @@ export async function listRaffleEntriesService(raffleId?: string) {
 }
 
 export async function listAvailableRaffleNumbersService(raffleId: string) {
-  if (!hasSupabaseConfig()) {
-    return listAvailableRaffleNumbers(raffleId);
-  }
+  ensureConfigured();
 
   await runDueRaffleDrawsSupabase();
   const raffle = await getRaffleRowOrThrow(raffleId);
@@ -371,9 +377,7 @@ export async function listAvailableRaffleNumbersService(raffleId: string) {
 }
 
 export async function createRaffleService(input: CreateRaffleInput) {
-  if (!hasSupabaseConfig()) {
-    return createRaffle(input);
-  }
+  ensureConfigured();
 
   const startAt = new Date(input.startDate);
   const endAt = new Date(input.endDate);
@@ -429,9 +433,7 @@ export async function enterRaffleService(
   note?: string,
   paymentReference?: string
 ) {
-  if (!hasSupabaseConfig()) {
-    return enterRaffle(raffleId, customerEmail, chosenNumber, note, paymentReference);
-  }
+  ensureConfigured();
 
   await runDueRaffleDrawsSupabase();
   const raffle = await getRaffleRowOrThrow(raffleId);
@@ -516,9 +518,7 @@ export async function enterRaffleService(
 }
 
 export async function updateRaffleEntryStatusService(entryId: string, status: RaffleEntryStatus) {
-  if (!hasSupabaseConfig()) {
-    return updateRaffleEntryStatus(entryId, status);
-  }
+  ensureConfigured();
 
   const supabase = getSupabaseAdminClient();
   const entry = await supabase
@@ -558,9 +558,7 @@ export async function updateRaffleEntryStatusService(entryId: string, status: Ra
 }
 
 export async function updateRaffleStatusService(raffleId: string, status: Raffle["status"]) {
-  if (!hasSupabaseConfig()) {
-    return updateRaffleStatus(raffleId, status);
-  }
+  ensureConfigured();
 
   const raffle = await getRaffleRowOrThrow(raffleId);
   if (raffle.drawn_at && status === "published") {
@@ -589,9 +587,7 @@ export async function updateRaffleStatusService(raffleId: string, status: Raffle
 }
 
 export async function drawRaffleWinnerService(raffleId: string) {
-  if (!hasSupabaseConfig()) {
-    return drawRaffleWinner(raffleId);
-  }
+  ensureConfigured();
 
   return drawRaffleWinnerSupabase(raffleId, { force: true });
 }

@@ -1,7 +1,11 @@
 import Image from "next/image";
-import { galleryAlbums, galleryMedia } from "@/lib/data";
+import { listGalleryBundlesService } from "@/lib/catalog-service";
 
-export default function GaleriaPage() {
+export const dynamic = "force-dynamic";
+
+export default async function GaleriaPage() {
+  const bundles = await listGalleryBundlesService();
+
   return (
     <main className="container section">
       <header className="page-header">
@@ -10,8 +14,7 @@ export default function GaleriaPage() {
       </header>
 
       <section className="stack-grid">
-        {galleryAlbums.map((album) => {
-          const albumMedia = galleryMedia.filter((media) => media.albumId === album.id);
+        {bundles.map(({ album, media: albumMedia }) => {
 
           return (
             <article key={album.id} className="card">
