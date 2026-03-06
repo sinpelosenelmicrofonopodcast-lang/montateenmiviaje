@@ -50,6 +50,20 @@ Copia `.env.example` a `.env.local` y completa:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `SUPABASE_SERVICE_ROLE_KEY`
 
+## Admin Auth (rol admin)
+- Las rutas `/admin/*` y `/api/admin/*` están protegidas por middleware.
+- Login admin: `/admin/login` (Supabase Auth email + password).
+- Solo entra un usuario con `app_metadata.role = "admin"` o `app_metadata.roles` que incluya `"admin"`.
+- Si el rol no es admin, redirige a `/admin/forbidden`.
+
+Ejemplo SQL para asignar rol admin en Supabase (SQL Editor):
+
+```sql
+update auth.users
+set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"role":"admin"}'::jsonb
+where email = 'tu-admin@dominio.com';
+```
+
 ## Ejecutar
 
 ```bash

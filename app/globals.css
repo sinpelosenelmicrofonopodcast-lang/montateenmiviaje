@@ -591,6 +591,25 @@ th {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
 }
 
+.admin-auth-card {
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.admin-auth-card form {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-3) 0;
+}
+
+.admin-logout-button {
+  position: fixed;
+  right: 20px;
+  bottom: 84px;
+  z-index: 12;
+  background: var(--white);
+}
+
 @media (max-width: 980px) {
   .nav-shell {
     height: 72px;
@@ -608,6 +627,11 @@ th {
     overflow-x: auto;
     white-space: nowrap;
     width: 100%;
+  }
+
+  .admin-logout-button {
+    right: 12px;
+    bottom: 78px;
   }
 
   .hero-shell,
