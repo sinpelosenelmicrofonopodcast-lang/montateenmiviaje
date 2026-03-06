@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 import { type NextRequest, NextResponse } from "next/server";
-import { isAdminRole, isAdminUser } from "@/lib/admin-auth";
+import { isAdminRole, isAdminUser, normalizeRole } from "@/lib/admin-auth";
 
 const ADMIN_WEB_PREFIXES = ["/dashboard/admin", "/admin"];
 const ADMIN_API_PREFIX = "/api/admin";
@@ -27,6 +28,34 @@ function toHomeRedirect(request: NextRequest) {
 
 function toApiForbidden(message = "Forbidden") {
   return NextResponse.json({ message }, { status: 403 });
+}
+
+async function getProfileRoleWithServiceKey(userId: string) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceKey) {
+    return null;
+  }
+
+  const adminClient = createClient(url, serviceKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false
+    }
+  });
+
+  const profile = await adminClient
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle<{ role: string | null }>();
+
+  if (profile.error) {
+    return null;
+  }
+
+  return normalizeRole(profile.data?.role);
 }
 
 export async function middleware(request: NextRequest) {
@@ -98,15 +127,20 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  const profileResult = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle<{ role: string | null }>();
+  const serviceRole = await getProfileRoleWithServiceKey(user.id);
+  const roleFromSession = serviceRole
+    ? serviceRole
+    : (
+      await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle<{ role: string | null }>()
+    ).data?.role;
 
-  const hasAdminAccess = isAdminRole(profileResult.data?.role) || isAdminUser(user);
+  const hasAdminAccess = isAdminRole(roleFromSession) || isAdminUser(user);
 
-  if (profileResult.error || !hasAdminAccess) {
+  if (!hasAdminAccess) {
     return isAdminApi ? toApiForbidden("Permisos insuficientes") : toHomeRedirect(request);
   }
 

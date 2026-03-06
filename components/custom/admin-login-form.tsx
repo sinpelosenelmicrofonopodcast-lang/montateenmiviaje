@@ -3,7 +3,6 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { isAdminRole, isAdminUser } from "@/lib/admin-auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 interface AdminLoginFormProps {
@@ -36,23 +35,6 @@ export function AdminLoginForm({ nextPath, initialError }: AdminLoginFormProps) 
 
       if (signInError || !data.user) {
         throw new Error(signInError?.message ?? "No se pudo iniciar sesión");
-      }
-
-      if (isAdminUser(data.user)) {
-        router.push(nextPath || "/dashboard/admin");
-        router.refresh();
-        return;
-      }
-
-      const profileResult = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", data.user.id)
-        .maybeSingle<{ role: string | null }>();
-
-      if (profileResult.error || !isAdminRole(profileResult.data?.role)) {
-        await supabase.auth.signOut();
-        throw new Error("Tu usuario no tiene permisos de admin");
       }
 
       router.push(nextPath || "/dashboard/admin");

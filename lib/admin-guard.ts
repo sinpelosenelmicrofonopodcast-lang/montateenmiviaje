@@ -2,6 +2,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { isAdminRole, isAdminUser, normalizeRole, type AppRole } from "@/lib/admin-auth";
+import { getSupabaseAdminClient, hasSupabaseConfig } from "@/lib/supabase-admin";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 interface ProfileRoleRow {
@@ -40,11 +41,17 @@ export async function getServerAuthContext(): Promise<ServerAuthContext> {
     };
   }
 
-  const profileResult = await supabase
-    .from("profiles")
-    .select("id,email,role")
-    .eq("id", user.id)
-    .maybeSingle<ProfileRoleRow>();
+  const profileResult = hasSupabaseConfig()
+    ? await getSupabaseAdminClient()
+        .from("profiles")
+        .select("id,email,role")
+        .eq("id", user.id)
+        .maybeSingle<ProfileRoleRow>()
+    : await supabase
+        .from("profiles")
+        .select("id,email,role")
+        .eq("id", user.id)
+        .maybeSingle<ProfileRoleRow>();
 
   if (profileResult.error) {
     return {
