@@ -19,6 +19,12 @@ export async function SiteHeader() {
   const auth = await getServerAuthContext();
   const isLoggedIn = Boolean(auth.user);
   const isAdmin = auth.role === "admin";
+  const navItems = [
+    ...links,
+    ...(isLoggedIn ? [{ href: "/dashboard", label: "Dashboard" }] : []),
+    ...(isLoggedIn ? [{ href: "/portal", label: "Portal" }] : []),
+    ...(isAdmin ? [{ href: "/dashboard/admin", label: "Admin" }] : [])
+  ];
 
   return (
     <header className="site-header">
@@ -27,16 +33,25 @@ export async function SiteHeader() {
           <Image src="/logo-header.png" alt="Móntate en mi viaje" width={64} height={64} priority />
           <span className="brand-name">Móntate en mi viaje</span>
         </Link>
-        <nav className="nav-links" aria-label="main navigation">
-          {links.map((link) => (
+
+        <nav className="nav-links nav-links-desktop" aria-label="main navigation">
+          {navItems.map((link) => (
             <Link key={link.href} href={link.href}>
               {link.label}
             </Link>
           ))}
-          {isLoggedIn ? <Link href="/dashboard">Dashboard</Link> : null}
-          {isLoggedIn ? <Link href="/portal">Portal</Link> : null}
-          {isAdmin ? <Link href="/dashboard/admin">Admin</Link> : null}
         </nav>
+
+        <details className="nav-mobile">
+          <summary className="nav-mobile-trigger">Menú</summary>
+          <nav className="nav-mobile-panel" aria-label="mobile navigation">
+            {navItems.map((link) => (
+              <Link key={link.href} href={link.href} className="nav-mobile-link">
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+        </details>
       </div>
     </header>
   );
