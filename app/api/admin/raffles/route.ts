@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createRaffle, listRaffleEntries, listRaffles } from "@/lib/booking-store";
+import { createRaffleService, listRaffleEntriesService, listRafflesService } from "@/lib/raffles-service";
 
 const createSchema = z.object({
   title: z.string().min(3),
@@ -18,16 +18,26 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  return NextResponse.json({
-    raffles: listRaffles({ includeDrafts: true }),
-    entries: listRaffleEntries()
-  });
+  try {
+    const [raffles, entries] = await Promise.all([
+      listRafflesService({ includeDrafts: true }),
+      listRaffleEntriesService()
+    ]);
+
+    return NextResponse.json({
+      raffles,
+      entries
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Error interno";
+    return NextResponse.json({ message }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
   try {
     const payload = createSchema.parse(await request.json());
-    const raffle = createRaffle(payload);
+    const raffle = await createRaffleService(payload);
     return NextResponse.json({ ok: true, raffle });
   } catch (error) {
     if (error instanceof z.ZodError) {

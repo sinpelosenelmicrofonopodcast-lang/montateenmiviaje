@@ -69,6 +69,7 @@ h4 {
 .brand {
   display: inline-flex;
   align-items: center;
+  gap: 10px;
   line-height: 1;
   flex-shrink: 0;
 }
@@ -76,6 +77,14 @@ h4 {
 .brand img {
   width: auto;
   height: 56px;
+}
+
+.brand-name {
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-weight: 700;
+  font-size: 30px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
 }
 
 .nav-links {
@@ -589,6 +598,10 @@ th {
 
   .brand img {
     height: 48px;
+  }
+
+  .brand-name {
+    font-size: 22px;
   }
 
   .nav-links {

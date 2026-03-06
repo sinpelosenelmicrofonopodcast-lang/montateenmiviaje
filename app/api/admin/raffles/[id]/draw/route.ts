@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { drawRaffleWinner } from "@/lib/booking-store";
+import { drawRaffleWinnerService } from "@/lib/raffles-service";
 
 export async function POST(
   _request: Request,
@@ -7,7 +7,7 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const result = drawRaffleWinner(id);
+    const result = await drawRaffleWinnerService(id);
 
     return NextResponse.json({
       ok: true,

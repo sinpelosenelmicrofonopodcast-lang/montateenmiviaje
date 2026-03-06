@@ -1,11 +1,13 @@
 import { AdminRafflePanel } from "@/components/custom/admin-raffle-panel";
-import { listRaffleEntries, listRaffles } from "@/lib/booking-store";
+import { listRaffleEntriesService, listRafflesService } from "@/lib/raffles-service";
 
 export const dynamic = "force-dynamic";
 
-export default function AdminSorteosPage() {
-  const raffles = listRaffles({ includeDrafts: true });
-  const entries = listRaffleEntries();
+export default async function AdminSorteosPage() {
+  const [raffles, entries] = await Promise.all([
+    listRafflesService({ includeDrafts: true }),
+    listRaffleEntriesService()
+  ]);
 
   return (
     <main className="container section">

@@ -21,6 +21,7 @@ export function SiteHeader() {
       <div className="container nav-shell">
         <Link href="/" className="brand">
           <Image src="/logo-header.png" alt="Móntate en mi viaje" width={64} height={64} priority />
+          <span className="brand-name">Móntate en mi viaje</span>
         </Link>
         <nav className="nav-links" aria-label="main navigation">
           {links.map((link) => (

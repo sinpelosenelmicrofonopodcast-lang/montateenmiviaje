@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { listRaffles } from "@/lib/booking-store";
+import { listRafflesService } from "@/lib/raffles-service";
 import { formatMoney } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-export default function SorteosPage() {
-  const raffles = listRaffles({ includeClosed: true });
+export default async function SorteosPage() {
+  const raffles = await listRafflesService({ includeClosed: true });
 
   return (
     <main className="container section">

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { registerCustomer } from "@/lib/booking-store";
+import { registerCustomerService } from "@/lib/raffles-service";
 
 const schema = z.object({
   fullName: z.string().min(2),
@@ -10,7 +10,7 @@ const schema = z.object({
 export async function POST(request: Request) {
   try {
     const payload = schema.parse(await request.json());
-    const customer = registerCustomer(payload);
+    const customer = await registerCustomerService(payload);
     return NextResponse.json({ ok: true, customerId: customer.id, isRegistered: customer.isRegistered });
   } catch (error) {
     if (error instanceof z.ZodError) {

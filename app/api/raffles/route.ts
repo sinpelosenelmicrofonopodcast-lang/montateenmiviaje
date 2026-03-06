@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { enterRaffle, listRaffles } from "@/lib/booking-store";
+import { enterRaffleService, listRafflesService } from "@/lib/raffles-service";
 
 const joinSchema = z.object({
   raffleId: z.string().uuid(),
@@ -11,13 +11,19 @@ const joinSchema = z.object({
 });
 
 export async function GET() {
-  return NextResponse.json({ raffles: listRaffles({ includeClosed: true }) });
+  try {
+    const raffles = await listRafflesService({ includeClosed: true });
+    return NextResponse.json({ raffles });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Error interno";
+    return NextResponse.json({ message }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
   try {
     const payload = joinSchema.parse(await request.json());
-    const entry = enterRaffle(
+    const entry = await enterRaffleService(
       payload.raffleId,
       payload.customerEmail,
       payload.chosenNumber,

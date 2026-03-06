@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { updateRaffleStatus } from "@/lib/booking-store";
+import { updateRaffleStatusService } from "@/lib/raffles-service";
 
 const schema = z.object({
   status: z.enum(["draft", "published", "closed"])
@@ -13,7 +13,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const payload = schema.parse(await request.json());
-    const raffle = updateRaffleStatus(id, payload.status);
+    const raffle = await updateRaffleStatusService(id, payload.status);
     if (!raffle) {
       return NextResponse.json({ message: "Sorteo no encontrado" }, { status: 404 });
     }

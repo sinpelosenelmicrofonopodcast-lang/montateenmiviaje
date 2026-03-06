@@ -34,9 +34,21 @@ Aplicación SaaS para viajes grupales premium (website + admin + portal cliente)
 ## Variables de entorno
 Copia `.env.example` a `.env.local` y completa:
 
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
 - `NEXT_PUBLIC_PAYPAL_CLIENT_ID`
 - `PAYPAL_CLIENT_SECRET`
 - `PAYPAL_ENV` (`sandbox` o `live`)
+
+## Supabase (registro + sorteos)
+1. Crea un proyecto en Supabase.
+2. Ejecuta las migraciones SQL:
+   - `supabase/migrations/001_init.sql`
+   - `supabase/migrations/002_runtime_raffles.sql`
+3. Configura en Vercel/local:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
 
 ## Ejecutar
 
@@ -52,6 +64,7 @@ Abrir [http://localhost:3000](http://localhost:3000).
 - `POST /api/registro`
 - `GET/POST /api/raffles`
 - `GET /api/raffles/:id`
+- `GET /api/health/supabase`
 - `POST /api/custom-requests`
 - `PATCH /api/custom-requests/:id/response`
 - `POST /api/paypal/create-order`
@@ -73,6 +86,8 @@ Abrir [http://localhost:3000](http://localhost:3000).
 
 ## Notas importantes
 - Esta versión V1 usa almacenamiento en memoria para reservas/pagos/CRM (`lib/booking-store.ts`).
+- Registro de usuarios y módulo de sorteos se conectan a Supabase cuando hay variables configuradas.
+- Si faltan variables de Supabase, sorteos/registro usan fallback local en memoria.
 - En producción, conectar persistencia Supabase para `bookings`, `payments`, `customers`, `documents`.
 - Validar firma de webhook de PayPal antes de producción.
 - Stripe está removido en esta rama; pagos solo por PayPal.

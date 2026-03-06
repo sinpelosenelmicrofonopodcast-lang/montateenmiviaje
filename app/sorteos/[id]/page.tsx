@@ -2,7 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { RaffleCountdown } from "@/components/custom/raffle-countdown";
 import { RaffleEntryForm } from "@/components/custom/raffle-entry-form";
-import { getRaffleById, listAvailableRaffleNumbers, listRaffleEntries } from "@/lib/booking-store";
+import {
+  getRaffleByIdService,
+  listAvailableRaffleNumbersService,
+  listRaffleEntriesService
+} from "@/lib/raffles-service";
 import { formatMoney } from "@/lib/format";
 
 interface SorteoDetailPageProps {
@@ -13,16 +17,16 @@ export const dynamic = "force-dynamic";
 
 export default async function SorteoDetailPage({ params }: SorteoDetailPageProps) {
   const { id } = await params;
-  const raffle = getRaffleById(id);
+  const raffle = await getRaffleByIdService(id);
 
   if (!raffle || raffle.status === "draft") {
     notFound();
   }
 
-  const entries = listRaffleEntries(id);
+  const entries = await listRaffleEntriesService(id);
   const entriesCount = entries.length;
   const confirmedCount = entries.filter((entry) => entry.status === "confirmed").length;
-  const availableNumbers = listAvailableRaffleNumbers(id) ?? [];
+  const availableNumbers = (await listAvailableRaffleNumbersService(id)) ?? [];
   const canParticipate = raffle.status === "published" && !raffle.drawnAt;
 
   return (

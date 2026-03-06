@@ -1,0 +1,597 @@
+import {
+  createRaffle,
+  drawRaffleWinner,
+  DrawRaffleWinnerResult,
+  enterRaffle,
+  getRaffleById,
+  listAvailableRaffleNumbers,
+  listRaffleEntries,
+  listRaffles,
+  registerCustomer,
+  RegisterCustomerInput,
+  updateRaffleEntryStatus,
+  updateRaffleStatus,
+  CreateRaffleInput
+} from "@/lib/booking-store";
+import { hasSupabaseConfig, getSupabaseAdminClient } from "@/lib/supabase-admin";
+import { Customer, Raffle, RaffleEntry, RaffleEntryStatus } from "@/lib/types";
+
+interface AppCustomerRow {
+  id: string;
+  full_name: string;
+  email: string;
+  is_registered: boolean;
+  created_at: string;
+}
+
+interface AppRaffleRow {
+  id: string;
+  title: string;
+  description: string;
+  is_free: boolean;
+  entry_fee: number;
+  payment_instructions: string;
+  requirements: string;
+  prize: string;
+  start_date: string;
+  end_date: string;
+  draw_at: string;
+  number_pool_size: number;
+  winner_entry_id: string | null;
+  winner_number: number | null;
+  winner_customer_email: string | null;
+  drawn_at: string | null;
+  status: Raffle["status"];
+  created_at: string;
+}
+
+interface AppRaffleEntryRow {
+  id: string;
+  raffle_id: string;
+  customer_id: string;
+  customer_email: string;
+  chosen_number: number;
+  payment_reference: string | null;
+  note: string | null;
+  status: RaffleEntryStatus;
+  created_at: string;
+}
+
+function mapCustomer(row: AppCustomerRow): Customer {
+  return {
+    id: row.id,
+    fullName: row.full_name,
+    email: row.email,
+    isRegistered: row.is_registered,
+    preferences: [],
+    notes: ["Registro Supabase"],
+    pipelineStage: "lead",
+    tags: ["registered"]
+  };
+}
+
+function mapRaffle(row: AppRaffleRow): Raffle {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    isFree: row.is_free,
+    entryFee: Number(row.entry_fee),
+    paymentInstructions: row.payment_instructions,
+    requirements: row.requirements,
+    prize: row.prize,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    drawAt: row.draw_at,
+    numberPoolSize: row.number_pool_size,
+    winnerEntryId: row.winner_entry_id ?? undefined,
+    winnerNumber: row.winner_number ?? undefined,
+    winnerCustomerEmail: row.winner_customer_email ?? undefined,
+    drawnAt: row.drawn_at ?? undefined,
+    status: row.status,
+    createdAt: row.created_at
+  };
+}
+
+function mapRaffleEntry(row: AppRaffleEntryRow): RaffleEntry {
+  return {
+    id: row.id,
+    raffleId: row.raffle_id,
+    customerId: row.customer_id,
+    customerEmail: row.customer_email,
+    chosenNumber: row.chosen_number,
+    paymentReference: row.payment_reference ?? undefined,
+    note: row.note ?? undefined,
+    status: row.status,
+    createdAt: row.created_at
+  };
+}
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function isUniqueViolation(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const pgError = error as { code?: string };
+  return pgError.code === "23505";
+}
+
+async function getRaffleRowOrThrow(raffleId: string) {
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("app_raffles")
+    .select("*")
+    .eq("id", raffleId)
+    .maybeSingle<AppRaffleRow>();
+
+  if (error) {
+    throw new Error(`Error consultando sorteo: ${error.message}`);
+  }
+
+  if (!data) {
+    throw new Error("Sorteo no encontrado");
+  }
+
+  return data;
+}
+
+async function drawRaffleWinnerSupabase(
+  raffleId: string,
+  options?: { force?: boolean }
+): Promise<DrawRaffleWinnerResult> {
+  const supabase = getSupabaseAdminClient();
+  const raffle = await getRaffleRowOrThrow(raffleId);
+
+  if (raffle.status === "draft") {
+    throw new Error("El sorteo aún no está publicado");
+  }
+
+  if (raffle.drawn_at) {
+    if (!raffle.winner_entry_id) {
+      return { raffle: mapRaffle(raffle), winnerEntry: null };
+    }
+
+    const winner = await supabase
+      .from("app_raffle_entries")
+      .select("*")
+      .eq("id", raffle.winner_entry_id)
+      .maybeSingle<AppRaffleEntryRow>();
+
+    if (winner.error) {
+      throw new Error(`Error consultando ganador: ${winner.error.message}`);
+    }
+
+    return {
+      raffle: mapRaffle(raffle),
+      winnerEntry: winner.data ? mapRaffleEntry(winner.data) : null
+    };
+  }
+
+  const now = new Date();
+  if (!options?.force && now.getTime() < new Date(raffle.draw_at).getTime()) {
+    throw new Error("Aún no llega la hora del sorteo");
+  }
+
+  const entriesResult = await supabase
+    .from("app_raffle_entries")
+    .select("*")
+    .eq("raffle_id", raffleId)
+    .eq("status", "confirmed")
+    .returns<AppRaffleEntryRow[]>();
+
+  if (entriesResult.error) {
+    throw new Error(`Error consultando participaciones: ${entriesResult.error.message}`);
+  }
+
+  const eligibleEntries = entriesResult.data ?? [];
+  const chosenWinner = eligibleEntries.length > 0
+    ? eligibleEntries[Math.floor(Math.random() * eligibleEntries.length)]
+    : null;
+
+  const updatePayload = {
+    status: "closed" as const,
+    drawn_at: now.toISOString(),
+    winner_entry_id: chosenWinner?.id ?? null,
+    winner_number: chosenWinner?.chosen_number ?? null,
+    winner_customer_email: chosenWinner?.customer_email ?? null
+  };
+
+  const update = await supabase
+    .from("app_raffles")
+    .update(updatePayload)
+    .eq("id", raffleId)
+    .select("*")
+    .single<AppRaffleRow>();
+
+  if (update.error || !update.data) {
+    throw new Error(`Error cerrando sorteo: ${update.error?.message ?? "sin datos"}`);
+  }
+
+  return {
+    raffle: mapRaffle(update.data),
+    winnerEntry: chosenWinner ? mapRaffleEntry(chosenWinner) : null
+  };
+}
+
+async function runDueRaffleDrawsSupabase() {
+  const supabase = getSupabaseAdminClient();
+  const now = new Date().toISOString();
+
+  const dueRaffles = await supabase
+    .from("app_raffles")
+    .select("id")
+    .eq("status", "published")
+    .is("drawn_at", null)
+    .lte("draw_at", now)
+    .returns<Array<{ id: string }>>();
+
+  if (dueRaffles.error) {
+    throw new Error(`Error verificando sorteos pendientes: ${dueRaffles.error.message}`);
+  }
+
+  for (const raffle of dueRaffles.data ?? []) {
+    await drawRaffleWinnerSupabase(raffle.id, { force: true });
+  }
+}
+
+export async function registerCustomerService(input: RegisterCustomerInput) {
+  if (!hasSupabaseConfig()) {
+    return registerCustomer(input);
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const payload = {
+    full_name: input.fullName.trim(),
+    email: normalizeEmail(input.email),
+    is_registered: true
+  };
+
+  const { data, error } = await supabase
+    .from("app_customers")
+    .upsert(payload, { onConflict: "email" })
+    .select("*")
+    .single<AppCustomerRow>();
+
+  if (error || !data) {
+    throw new Error(`No se pudo registrar usuario: ${error?.message ?? "sin datos"}`);
+  }
+
+  return mapCustomer(data);
+}
+
+export async function listRafflesService(options?: { includeDrafts?: boolean; includeClosed?: boolean }) {
+  if (!hasSupabaseConfig()) {
+    return listRaffles(options);
+  }
+
+  await runDueRaffleDrawsSupabase();
+
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("app_raffles")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .returns<AppRaffleRow[]>();
+
+  if (error) {
+    throw new Error(`No se pudieron cargar sorteos: ${error.message}`);
+  }
+
+  const includeDrafts = options?.includeDrafts ?? false;
+  const includeClosed = options?.includeClosed ?? false;
+  const mapped = (data ?? []).map(mapRaffle);
+
+  if (includeDrafts) {
+    return mapped;
+  }
+
+  return mapped.filter((raffle) => raffle.status === "published" || (includeClosed && raffle.status === "closed"));
+}
+
+export async function getRaffleByIdService(raffleId: string) {
+  if (!hasSupabaseConfig()) {
+    return getRaffleById(raffleId);
+  }
+
+  await runDueRaffleDrawsSupabase();
+  const supabase = getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("app_raffles")
+    .select("*")
+    .eq("id", raffleId)
+    .maybeSingle<AppRaffleRow>();
+
+  if (error) {
+    throw new Error(`No se pudo cargar el sorteo: ${error.message}`);
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return mapRaffle(data);
+}
+
+export async function listRaffleEntriesService(raffleId?: string) {
+  if (!hasSupabaseConfig()) {
+    return listRaffleEntries(raffleId);
+  }
+
+  await runDueRaffleDrawsSupabase();
+  const supabase = getSupabaseAdminClient();
+  const query = supabase
+    .from("app_raffle_entries")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  const response = raffleId
+    ? await query.eq("raffle_id", raffleId).returns<AppRaffleEntryRow[]>()
+    : await query.returns<AppRaffleEntryRow[]>();
+
+  if (response.error) {
+    throw new Error(`No se pudieron cargar participaciones: ${response.error.message}`);
+  }
+
+  return (response.data ?? []).map(mapRaffleEntry);
+}
+
+export async function listAvailableRaffleNumbersService(raffleId: string) {
+  if (!hasSupabaseConfig()) {
+    return listAvailableRaffleNumbers(raffleId);
+  }
+
+  await runDueRaffleDrawsSupabase();
+  const raffle = await getRaffleRowOrThrow(raffleId);
+  const supabase = getSupabaseAdminClient();
+  const entries = await supabase
+    .from("app_raffle_entries")
+    .select("chosen_number")
+    .eq("raffle_id", raffleId)
+    .neq("status", "rejected")
+    .returns<Array<{ chosen_number: number }>>();
+
+  if (entries.error) {
+    throw new Error(`No se pudieron cargar números ocupados: ${entries.error.message}`);
+  }
+
+  const taken = new Set((entries.data ?? []).map((row) => row.chosen_number));
+  const available: number[] = [];
+
+  for (let number = 1; number <= raffle.number_pool_size; number += 1) {
+    if (!taken.has(number)) {
+      available.push(number);
+    }
+  }
+
+  return available;
+}
+
+export async function createRaffleService(input: CreateRaffleInput) {
+  if (!hasSupabaseConfig()) {
+    return createRaffle(input);
+  }
+
+  const startAt = new Date(input.startDate);
+  const endAt = new Date(input.endDate);
+  if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+    throw new Error("Fechas del sorteo inválidas");
+  }
+  if (endAt.getTime() < startAt.getTime()) {
+    throw new Error("La fecha de cierre no puede ser menor que la fecha de inicio");
+  }
+
+  const drawAt = new Date(input.drawAt);
+  if (Number.isNaN(drawAt.getTime())) {
+    throw new Error("Fecha de anuncio inválida");
+  }
+  if (drawAt.getTime() < endAt.getTime()) {
+    throw new Error("La fecha de anuncio debe ser igual o posterior al cierre");
+  }
+  if (!Number.isInteger(input.numberPoolSize) || input.numberPoolSize < 1) {
+    throw new Error("La cantidad de números debe ser mayor a 0");
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const result = await supabase
+    .from("app_raffles")
+    .insert({
+      title: input.title,
+      description: input.description,
+      is_free: input.isFree,
+      entry_fee: input.isFree ? 0 : input.entryFee,
+      payment_instructions: input.isFree ? "No requiere pago." : input.paymentInstructions,
+      requirements: input.requirements,
+      prize: input.prize,
+      start_date: input.startDate,
+      end_date: input.endDate,
+      draw_at: drawAt.toISOString(),
+      number_pool_size: input.numberPoolSize,
+      status: input.status
+    })
+    .select("*")
+    .single<AppRaffleRow>();
+
+  if (result.error || !result.data) {
+    throw new Error(`No se pudo crear el sorteo: ${result.error?.message ?? "sin datos"}`);
+  }
+
+  return mapRaffle(result.data);
+}
+
+export async function enterRaffleService(
+  raffleId: string,
+  customerEmail: string,
+  chosenNumber: number,
+  note?: string,
+  paymentReference?: string
+) {
+  if (!hasSupabaseConfig()) {
+    return enterRaffle(raffleId, customerEmail, chosenNumber, note, paymentReference);
+  }
+
+  await runDueRaffleDrawsSupabase();
+  const raffle = await getRaffleRowOrThrow(raffleId);
+
+  if (raffle.status !== "published") {
+    throw new Error("Este sorteo no está disponible");
+  }
+
+  const now = Date.now();
+  const startsAt = new Date(raffle.start_date).getTime();
+  const drawAt = new Date(raffle.draw_at).getTime();
+
+  if (!Number.isNaN(startsAt) && now < startsAt) {
+    throw new Error("El sorteo aún no inicia");
+  }
+  if (!Number.isNaN(drawAt) && now >= drawAt) {
+    throw new Error("El sorteo ya cerró participaciones");
+  }
+  if (!Number.isInteger(chosenNumber) || chosenNumber < 1 || chosenNumber > raffle.number_pool_size) {
+    throw new Error(`El número debe estar entre 1 y ${raffle.number_pool_size}`);
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const normalizedEmail = normalizeEmail(customerEmail);
+  const customer = await supabase
+    .from("app_customers")
+    .select("*")
+    .eq("email", normalizedEmail)
+    .eq("is_registered", true)
+    .maybeSingle<AppCustomerRow>();
+
+  if (customer.error) {
+    throw new Error(`Error validando usuario: ${customer.error.message}`);
+  }
+  if (!customer.data) {
+    throw new Error("Debes estar registrado para participar");
+  }
+
+  const existing = await supabase
+    .from("app_raffle_entries")
+    .select("id")
+    .eq("raffle_id", raffleId)
+    .eq("customer_id", customer.data.id)
+    .maybeSingle<{ id: string }>();
+
+  if (existing.error) {
+    throw new Error(`Error validando participación: ${existing.error.message}`);
+  }
+  if (existing.data) {
+    throw new Error("Ya participas en este sorteo");
+  }
+
+  const status: RaffleEntryStatus = raffle.is_free
+    ? "confirmed"
+    : paymentReference
+      ? "pending_review"
+      : "pending_payment";
+
+  const insert = await supabase
+    .from("app_raffle_entries")
+    .insert({
+      raffle_id: raffleId,
+      customer_id: customer.data.id,
+      customer_email: customer.data.email,
+      chosen_number: chosenNumber,
+      payment_reference: paymentReference ?? null,
+      note: note ?? null,
+      status
+    })
+    .select("*")
+    .single<AppRaffleEntryRow>();
+
+  if (insert.error || !insert.data) {
+    if (isUniqueViolation(insert.error)) {
+      throw new Error("Ese número ya fue seleccionado por otro participante");
+    }
+
+    throw new Error(`No se pudo registrar participación: ${insert.error?.message ?? "sin datos"}`);
+  }
+
+  return mapRaffleEntry(insert.data);
+}
+
+export async function updateRaffleEntryStatusService(entryId: string, status: RaffleEntryStatus) {
+  if (!hasSupabaseConfig()) {
+    return updateRaffleEntryStatus(entryId, status);
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const entry = await supabase
+    .from("app_raffle_entries")
+    .select("*")
+    .eq("id", entryId)
+    .maybeSingle<AppRaffleEntryRow>();
+
+  if (entry.error) {
+    throw new Error(`Error consultando participación: ${entry.error.message}`);
+  }
+  if (!entry.data) {
+    return null;
+  }
+
+  const raffle = await getRaffleRowOrThrow(entry.data.raffle_id);
+  if (raffle.drawn_at) {
+    throw new Error("No se puede editar participaciones de un sorteo ya sorteado");
+  }
+
+  const updated = await supabase
+    .from("app_raffle_entries")
+    .update({ status })
+    .eq("id", entryId)
+    .select("*")
+    .single<AppRaffleEntryRow>();
+
+  if (updated.error || !updated.data) {
+    if (isUniqueViolation(updated.error)) {
+      throw new Error("El número ya fue reasignado a otro participante");
+    }
+
+    throw new Error(`No se pudo actualizar participación: ${updated.error?.message ?? "sin datos"}`);
+  }
+
+  return mapRaffleEntry(updated.data);
+}
+
+export async function updateRaffleStatusService(raffleId: string, status: Raffle["status"]) {
+  if (!hasSupabaseConfig()) {
+    return updateRaffleStatus(raffleId, status);
+  }
+
+  const raffle = await getRaffleRowOrThrow(raffleId);
+  if (raffle.drawn_at && status === "published") {
+    throw new Error("No se puede reabrir un sorteo ya sorteado");
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const updated = await supabase
+    .from("app_raffles")
+    .update({ status })
+    .eq("id", raffleId)
+    .select("*")
+    .single<AppRaffleRow>();
+
+  if (updated.error || !updated.data) {
+    throw new Error(`No se pudo actualizar estado: ${updated.error?.message ?? "sin datos"}`);
+  }
+
+  if (status === "published") {
+    await runDueRaffleDrawsSupabase();
+    const current = await getRaffleRowOrThrow(raffleId);
+    return mapRaffle(current);
+  }
+
+  return mapRaffle(updated.data);
+}
+
+export async function drawRaffleWinnerService(raffleId: string) {
+  if (!hasSupabaseConfig()) {
+    return drawRaffleWinner(raffleId);
+  }
+
+  return drawRaffleWinnerSupabase(raffleId, { force: true });
+}
