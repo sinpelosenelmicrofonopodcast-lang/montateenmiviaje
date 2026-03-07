@@ -64,11 +64,7 @@ export default async function DashboardPage() {
             <Link className="button-dark" href="/dashboard/admin">
               Admin Panel
             </Link>
-          ) : (
-            <Link className="button-outline" href="/admin/login">
-              Ingreso admin
-            </Link>
-          )}
+          ) : null}
         </div>
       </section>
 

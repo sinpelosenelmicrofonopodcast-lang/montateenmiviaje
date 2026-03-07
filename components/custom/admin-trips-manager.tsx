@@ -18,8 +18,10 @@ function toList(value: string) {
 
 export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
   const [trips, setTrips] = useState(initialTrips);
+  const [editingTripId, setEditingTripId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState({
     slug: "",
     title: "",
@@ -31,14 +33,83 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
     totalSpots: "20",
     heroImage: "",
     summary: "",
+    shortDescription: "",
+    longDescription: "",
+    durationDays: "",
+    galleryImages: "",
     includes: "",
     excludes: "",
     policies: "",
     requirements: "",
     hotels: "",
     publishStatus: "draft",
-    featured: false
+    featured: false,
+    seoTitle: "",
+    seoDescription: "",
+    seoOgImage: ""
   });
+
+  function resetForm() {
+    setForm({
+      slug: "",
+      title: "",
+      destination: "",
+      category: "Luxury",
+      startDate: "",
+      endDate: "",
+      availableSpots: "20",
+      totalSpots: "20",
+      heroImage: "",
+      summary: "",
+      shortDescription: "",
+      longDescription: "",
+      durationDays: "",
+      galleryImages: "",
+      includes: "",
+      excludes: "",
+      policies: "",
+      requirements: "",
+      hotels: "",
+      publishStatus: "draft",
+      featured: false,
+      seoTitle: "",
+      seoDescription: "",
+      seoOgImage: ""
+    });
+    setEditingTripId(null);
+  }
+
+  function startEdit(trip: Trip) {
+    setEditingTripId(trip.id);
+    setError(null);
+    setMessage(null);
+    setForm({
+      slug: trip.slug,
+      title: trip.title,
+      destination: trip.destination,
+      category: trip.category,
+      startDate: trip.startDate.slice(0, 10),
+      endDate: trip.endDate.slice(0, 10),
+      availableSpots: String(trip.availableSpots),
+      totalSpots: String(trip.totalSpots),
+      heroImage: trip.heroImage,
+      summary: trip.summary,
+      shortDescription: trip.shortDescription ?? "",
+      longDescription: trip.longDescription ?? "",
+      durationDays: trip.durationDays ? String(trip.durationDays) : "",
+      galleryImages: (trip.galleryImages ?? []).join("\n"),
+      includes: trip.includes.join("\n"),
+      excludes: trip.excludes.join("\n"),
+      policies: trip.policies.join("\n"),
+      requirements: trip.requirements.join("\n"),
+      hotels: (trip.hotels ?? []).join("\n"),
+      publishStatus: trip.publishStatus ?? "draft",
+      featured: Boolean(trip.featured),
+      seoTitle: trip.seoTitle ?? "",
+      seoDescription: trip.seoDescription ?? "",
+      seoOgImage: trip.seoOgImage ?? ""
+    });
+  }
 
   async function reloadTrips() {
     const response = await fetch("/api/admin/trips", { cache: "no-store" });
@@ -49,61 +120,54 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
     setTrips(payload.trips);
   }
 
-  async function handleCreateTrip(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSaveTrip(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setError(null);
+    setMessage(null);
 
     try {
-      const response = await fetch("/api/admin/trips", {
-        method: "POST",
+      const body = {
+        slug: form.slug,
+        title: form.title,
+        destination: form.destination,
+        category: form.category,
+        startDate: form.startDate,
+        endDate: form.endDate,
+        availableSpots: Number(form.availableSpots),
+        totalSpots: Number(form.totalSpots),
+        heroImage: form.heroImage,
+        summary: form.summary,
+        shortDescription: form.shortDescription || undefined,
+        longDescription: form.longDescription || undefined,
+        durationDays: form.durationDays ? Number(form.durationDays) : undefined,
+        galleryImages: toList(form.galleryImages),
+        includes: toList(form.includes),
+        excludes: toList(form.excludes),
+        policies: toList(form.policies),
+        requirements: toList(form.requirements),
+        hotels: toList(form.hotels),
+        publishStatus: form.publishStatus,
+        featured: form.featured,
+        seoTitle: form.seoTitle || undefined,
+        seoDescription: form.seoDescription || undefined,
+        seoOgImage: form.seoOgImage || undefined
+      };
+
+      const response = await fetch(editingTripId ? `/api/admin/trips/${editingTripId}` : "/api/admin/trips", {
+        method: editingTripId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          slug: form.slug,
-          title: form.title,
-          destination: form.destination,
-          category: form.category,
-          startDate: form.startDate,
-          endDate: form.endDate,
-          availableSpots: Number(form.availableSpots),
-          totalSpots: Number(form.totalSpots),
-          heroImage: form.heroImage,
-          summary: form.summary,
-          includes: toList(form.includes),
-          excludes: toList(form.excludes),
-          policies: toList(form.policies),
-          requirements: toList(form.requirements),
-          hotels: toList(form.hotels),
-          publishStatus: form.publishStatus,
-          featured: form.featured
-        })
+        body: JSON.stringify(body)
       });
 
-      const payload = (await response.json()) as { message?: string };
+      const result = (await response.json()) as { message?: string };
       if (!response.ok) {
-        throw new Error(payload.message ?? "No se pudo crear viaje");
+        throw new Error(result.message ?? `No se pudo ${editingTripId ? "actualizar" : "crear"} viaje`);
       }
 
       await reloadTrips();
-      setForm({
-        slug: "",
-        title: "",
-        destination: "",
-        category: "Luxury",
-        startDate: "",
-        endDate: "",
-        availableSpots: "20",
-        totalSpots: "20",
-        heroImage: "",
-        summary: "",
-        includes: "",
-        excludes: "",
-        policies: "",
-        requirements: "",
-        hotels: "",
-        publishStatus: "draft",
-        featured: false
-      });
+      setMessage(editingTripId ? "Viaje actualizado." : "Viaje creado.");
+      resetForm();
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Error inesperado");
     } finally {
@@ -111,10 +175,34 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
     }
   }
 
+  async function handleDeleteTrip(tripId: string) {
+    setLoading(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const response = await fetch(`/api/admin/trips/${tripId}`, { method: "DELETE" });
+      const payload = (await response.json()) as { message?: string };
+      if (!response.ok) {
+        throw new Error(payload.message ?? "No se pudo eliminar viaje");
+      }
+
+      await reloadTrips();
+      if (editingTripId === tripId) {
+        resetForm();
+      }
+      setMessage("Viaje eliminado.");
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Error inesperado");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <>
-      <form className="card request-grid" onSubmit={handleCreateTrip}>
-        <h3 className="request-full">Crear viaje real</h3>
+      <form className="card request-grid" onSubmit={handleSaveTrip}>
+        <h3 className="request-full">{editingTripId ? "Editar viaje" : "Crear viaje real"}</h3>
         <label>
           Slug
           <input value={form.slug} onChange={(event) => setForm({ ...form, slug: event.target.value })} required />
@@ -197,6 +285,18 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
             required
           />
         </label>
+        <label className="request-full">
+          Descripción corta
+          <textarea rows={2} value={form.shortDescription} onChange={(event) => setForm({ ...form, shortDescription: event.target.value })} />
+        </label>
+        <label className="request-full">
+          Descripción larga
+          <textarea rows={4} value={form.longDescription} onChange={(event) => setForm({ ...form, longDescription: event.target.value })} />
+        </label>
+        <label>
+          Duración (días)
+          <input type="number" min={1} value={form.durationDays} onChange={(event) => setForm({ ...form, durationDays: event.target.value })} />
+        </label>
         <label>
           Estado
           <select
@@ -204,13 +304,15 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
             onChange={(event) =>
               setForm({
                 ...form,
-                publishStatus: event.target.value as "draft" | "published" | "unpublished"
+                publishStatus: event.target.value as "draft" | "published" | "unpublished" | "sold_out" | "archived"
               })
             }
           >
             <option value="draft">Draft</option>
             <option value="published">Publicado</option>
             <option value="unpublished">Despublicado</option>
+            <option value="sold_out">Sold out</option>
+            <option value="archived">Archivado</option>
           </select>
         </label>
         <label>
@@ -222,6 +324,10 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
             <option value="no">No</option>
             <option value="yes">Sí</option>
           </select>
+        </label>
+        <label className="request-full">
+          Galería (1 URL por línea)
+          <textarea rows={4} value={form.galleryImages} onChange={(event) => setForm({ ...form, galleryImages: event.target.value })} />
         </label>
         <label className="request-full">
           Incluye (1 línea por item)
@@ -247,9 +353,29 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
           Hoteles (1 línea por item)
           <textarea rows={3} value={form.hotels} onChange={(event) => setForm({ ...form, hotels: event.target.value })} />
         </label>
-        <button className="button-dark" type="submit" disabled={loading}>
-          {loading ? "Guardando..." : "Guardar viaje"}
-        </button>
+        <label>
+          SEO title
+          <input value={form.seoTitle} onChange={(event) => setForm({ ...form, seoTitle: event.target.value })} />
+        </label>
+        <label className="request-full">
+          SEO description
+          <textarea rows={3} value={form.seoDescription} onChange={(event) => setForm({ ...form, seoDescription: event.target.value })} />
+        </label>
+        <label className="request-full">
+          SEO og image
+          <input value={form.seoOgImage} onChange={(event) => setForm({ ...form, seoOgImage: event.target.value })} />
+        </label>
+        <div className="button-row request-full">
+          <button className="button-dark" type="submit" disabled={loading}>
+            {loading ? "Guardando..." : editingTripId ? "Actualizar viaje" : "Guardar viaje"}
+          </button>
+          {editingTripId ? (
+            <button className="button-outline" type="button" disabled={loading} onClick={resetForm}>
+              Cancelar edición
+            </button>
+          ) : null}
+        </div>
+        {message ? <p className="success request-full">{message}</p> : null}
         {error ? <p className="error request-full">{error}</p> : null}
       </form>
 
@@ -276,6 +402,9 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
                 </div>
               </div>
               <div className="button-row">
+                <button className="button-dark" type="button" onClick={() => startEdit(trip)}>
+                  Editar
+                </button>
                 <Link className="button-dark" href={`/admin/viajes/${trip.slug}/builder`}>
                   Abrir builder
                 </Link>
@@ -285,6 +414,9 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
                 <a className="button-outline" href={`/api/pdf/trip/${trip.slug}?audience=internal&lang=es&showPrices=true`}>
                   PDF interno
                 </a>
+                <button className="button-outline" type="button" onClick={() => void handleDeleteTrip(trip.id)}>
+                  Eliminar
+                </button>
               </div>
             </article>
           );

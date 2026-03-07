@@ -8,21 +8,39 @@ interface AdminRafflePanelProps {
   initialEntries: RaffleEntry[];
 }
 
+function toLocalDateTime(value?: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const tzOffsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - tzOffsetMs).toISOString().slice(0, 16);
+}
+
 export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRafflePanelProps) {
   const [raffles, setRaffles] = useState(initialRaffles);
   const [entries, setEntries] = useState(initialEntries);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [isFree, setIsFree] = useState(true);
-  const [entryFee, setEntryFee] = useState(0);
-  const [paymentInstructions, setPaymentInstructions] = useState("No requiere pago.");
-  const [requirements, setRequirements] = useState("Usuario registrado.");
-  const [prize, setPrize] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [drawAt, setDrawAt] = useState("");
-  const [numberPoolSize, setNumberPoolSize] = useState(100);
-  const [status, setStatus] = useState<Raffle["status"]>("draft");
+  const [editingRaffleId, setEditingRaffleId] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    rulesText: "",
+    imageUrl: "",
+    ctaLabel: "",
+    ctaHref: "",
+    isFree: true,
+    entryFee: "0",
+    paymentInstructions: "No requiere pago.",
+    requirements: "Usuario registrado.",
+    prize: "",
+    startDate: "",
+    endDate: "",
+    drawAt: "",
+    numberPoolSize: "100",
+    status: "draft" as Raffle["status"],
+    seoTitle: "",
+    seoDescription: "",
+    seoOgImage: ""
+  });
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [drawingId, setDrawingId] = useState<string | null>(null);
@@ -45,6 +63,58 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
     return mapped;
   }, [raffles]);
 
+  function resetForm() {
+    setForm({
+      title: "",
+      description: "",
+      rulesText: "",
+      imageUrl: "",
+      ctaLabel: "",
+      ctaHref: "",
+      isFree: true,
+      entryFee: "0",
+      paymentInstructions: "No requiere pago.",
+      requirements: "Usuario registrado.",
+      prize: "",
+      startDate: "",
+      endDate: "",
+      drawAt: "",
+      numberPoolSize: "100",
+      status: "draft",
+      seoTitle: "",
+      seoDescription: "",
+      seoOgImage: ""
+    });
+    setEditingRaffleId(null);
+  }
+
+  function startEdit(raffle: Raffle) {
+    setEditingRaffleId(raffle.id);
+    setFeedback(null);
+    setError(null);
+    setForm({
+      title: raffle.title,
+      description: raffle.description,
+      rulesText: raffle.rulesText ?? "",
+      imageUrl: raffle.imageUrl ?? "",
+      ctaLabel: raffle.ctaLabel ?? "",
+      ctaHref: raffle.ctaHref ?? "",
+      isFree: raffle.isFree,
+      entryFee: String(raffle.entryFee),
+      paymentInstructions: raffle.paymentInstructions,
+      requirements: raffle.requirements,
+      prize: raffle.prize,
+      startDate: raffle.startDate.slice(0, 10),
+      endDate: raffle.endDate.slice(0, 10),
+      drawAt: toLocalDateTime(raffle.drawAt),
+      numberPoolSize: String(raffle.numberPoolSize),
+      status: raffle.status,
+      seoTitle: raffle.seoTitle ?? "",
+      seoDescription: raffle.seoDescription ?? "",
+      seoOgImage: raffle.seoOgImage ?? ""
+    });
+  }
+
   async function refresh() {
     const response = await fetch("/api/admin/raffles", { cache: "no-store" });
     const payload = (await response.json()) as { raffles: Raffle[]; entries: RaffleEntry[] };
@@ -52,51 +122,77 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
     setEntries(payload.entries);
   }
 
-  async function createRaffle(event: React.FormEvent<HTMLFormElement>) {
+  async function saveRaffle(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFeedback(null);
     setError(null);
 
     try {
-      const drawAtDate = new Date(drawAt);
+      const drawAtDate = new Date(form.drawAt);
       if (Number.isNaN(drawAtDate.getTime())) {
         throw new Error("Define una fecha/hora válida para anunciar el ganador");
       }
 
-      const response = await fetch("/api/admin/raffles", {
-        method: "POST",
+      const payload = {
+        title: form.title,
+        description: form.description,
+        rulesText: form.rulesText || undefined,
+        imageUrl: form.imageUrl || undefined,
+        ctaLabel: form.ctaLabel || undefined,
+        ctaHref: form.ctaHref || undefined,
+        isFree: form.isFree,
+        entryFee: form.isFree ? 0 : Number(form.entryFee || 0),
+        paymentInstructions: form.paymentInstructions,
+        requirements: form.requirements,
+        prize: form.prize,
+        startDate: form.startDate,
+        endDate: form.endDate,
+        drawAt: drawAtDate.toISOString(),
+        numberPoolSize: Number(form.numberPoolSize || 1),
+        status: form.status,
+        seoTitle: form.seoTitle || undefined,
+        seoDescription: form.seoDescription || undefined,
+        seoOgImage: form.seoOgImage || undefined
+      };
+
+      const response = await fetch(editingRaffleId ? `/api/admin/raffles/${editingRaffleId}` : "/api/admin/raffles", {
+        method: editingRaffleId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title,
-          description,
-          isFree,
-          entryFee: isFree ? 0 : entryFee,
-          paymentInstructions,
-          requirements,
-          prize,
-          startDate,
-          endDate,
-          drawAt: drawAtDate.toISOString(),
-          numberPoolSize,
-          status
-        })
+        body: JSON.stringify(payload)
       });
 
-      const payload = (await response.json()) as { message?: string };
+      const result = (await response.json()) as { message?: string };
       if (!response.ok) {
-        throw new Error(payload.message ?? "No se pudo crear el sorteo");
+        throw new Error(result.message ?? `No se pudo ${editingRaffleId ? "actualizar" : "crear"} el sorteo`);
       }
 
       await refresh();
-      setTitle("");
-      setDescription("");
-      setPrize("");
-      setDrawAt("");
-      setFeedback("Sorteo guardado correctamente.");
+      setFeedback(editingRaffleId ? "Sorteo actualizado correctamente." : "Sorteo guardado correctamente.");
+      resetForm();
     } catch (createError) {
       const message = createError instanceof Error ? createError.message : "Error inesperado";
       setError(message);
     }
+  }
+
+  async function removeRaffle(raffleId: string) {
+    setFeedback(null);
+    setError(null);
+
+    const response = await fetch(`/api/admin/raffles/${raffleId}`, { method: "DELETE" });
+    const payload = (await response.json()) as { message?: string };
+
+    if (!response.ok) {
+      setError(payload.message ?? "No se pudo eliminar el sorteo");
+      return;
+    }
+
+    if (editingRaffleId === raffleId) {
+      resetForm();
+    }
+
+    await refresh();
+    setFeedback("Sorteo eliminado.");
   }
 
   async function updateEntry(entryId: string, nextStatus: RaffleEntry["status"]) {
@@ -169,24 +265,40 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
 
   return (
     <>
-      <form onSubmit={createRaffle} className="card">
-        <h3>Crear sorteo/rifa</h3>
+      <form onSubmit={saveRaffle} className="card">
+        <h3>{editingRaffleId ? "Editar sorteo/rifa" : "Crear sorteo/rifa"}</h3>
         <div className="request-grid">
           <label>
             Título
-            <input value={title} onChange={(event) => setTitle(event.target.value)} required />
+            <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required />
           </label>
           <label>
             Premio
-            <input value={prize} onChange={(event) => setPrize(event.target.value)} required />
+            <input value={form.prize} onChange={(event) => setForm({ ...form, prize: event.target.value })} required />
           </label>
           <label className="request-full">
             Descripción
-            <textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} required />
+            <textarea rows={3} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} required />
+          </label>
+          <label className="request-full">
+            Reglas
+            <textarea rows={3} value={form.rulesText} onChange={(event) => setForm({ ...form, rulesText: event.target.value })} />
+          </label>
+          <label>
+            Imagen URL
+            <input value={form.imageUrl} onChange={(event) => setForm({ ...form, imageUrl: event.target.value })} />
+          </label>
+          <label>
+            CTA label
+            <input value={form.ctaLabel} onChange={(event) => setForm({ ...form, ctaLabel: event.target.value })} />
+          </label>
+          <label>
+            CTA href
+            <input value={form.ctaHref} onChange={(event) => setForm({ ...form, ctaHref: event.target.value })} />
           </label>
           <label>
             Modalidad
-            <select value={isFree ? "free" : "paid"} onChange={(event) => setIsFree(event.target.value === "free")}>
+            <select value={form.isFree ? "free" : "paid"} onChange={(event) => setForm({ ...form, isFree: event.target.value === "free" })}>
               <option value="free">Gratis</option>
               <option value="paid">Pago por entrada</option>
             </select>
@@ -196,25 +308,25 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
             <input
               type="number"
               min={0}
-              value={entryFee}
-              onChange={(event) => setEntryFee(Number(event.target.value) || 0)}
-              disabled={isFree}
+              value={form.entryFee}
+              onChange={(event) => setForm({ ...form, entryFee: event.target.value })}
+              disabled={form.isFree}
             />
           </label>
           <label>
             Inicio
-            <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} required />
+            <input type="date" value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} required />
           </label>
           <label>
             Cierre
-            <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} required />
+            <input type="date" value={form.endDate} onChange={(event) => setForm({ ...form, endDate: event.target.value })} required />
           </label>
           <label>
             Anuncio ganador
             <input
               type="datetime-local"
-              value={drawAt}
-              onChange={(event) => setDrawAt(event.target.value)}
+              value={form.drawAt}
+              onChange={(event) => setForm({ ...form, drawAt: event.target.value })}
               required
             />
           </label>
@@ -224,14 +336,14 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
               type="number"
               min={1}
               max={5000}
-              value={numberPoolSize}
-              onChange={(event) => setNumberPoolSize(Number(event.target.value) || 1)}
+              value={form.numberPoolSize}
+              onChange={(event) => setForm({ ...form, numberPoolSize: event.target.value })}
               required
             />
           </label>
           <label>
             Estado
-            <select value={status} onChange={(event) => setStatus(event.target.value as Raffle["status"])}>
+            <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value as Raffle["status"] })}>
               <option value="draft">Draft</option>
               <option value="published">Publicado</option>
               <option value="closed">Cerrado</option>
@@ -239,19 +351,40 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
           </label>
           <label>
             Requisitos
-            <input value={requirements} onChange={(event) => setRequirements(event.target.value)} required />
+            <input value={form.requirements} onChange={(event) => setForm({ ...form, requirements: event.target.value })} required />
           </label>
           <label className="request-full">
             Instrucciones de pago
             <textarea
               rows={3}
-              value={paymentInstructions}
-              onChange={(event) => setPaymentInstructions(event.target.value)}
+              value={form.paymentInstructions}
+              onChange={(event) => setForm({ ...form, paymentInstructions: event.target.value })}
               required
             />
           </label>
+          <label>
+            SEO title
+            <input value={form.seoTitle} onChange={(event) => setForm({ ...form, seoTitle: event.target.value })} />
+          </label>
+          <label className="request-full">
+            SEO description
+            <textarea rows={2} value={form.seoDescription} onChange={(event) => setForm({ ...form, seoDescription: event.target.value })} />
+          </label>
+          <label className="request-full">
+            SEO og image
+            <input value={form.seoOgImage} onChange={(event) => setForm({ ...form, seoOgImage: event.target.value })} />
+          </label>
         </div>
-        <button className="button-dark" type="submit">Guardar sorteo/rifa</button>
+        <div className="button-row">
+          <button className="button-dark" type="submit">
+            {editingRaffleId ? "Actualizar sorteo" : "Guardar sorteo/rifa"}
+          </button>
+          {editingRaffleId ? (
+            <button className="button-outline" type="button" onClick={resetForm}>
+              Cancelar edición
+            </button>
+          ) : null}
+        </div>
         {feedback ? <p className="success">{feedback}</p> : null}
         {error ? <p className="error">{error}</p> : null}
       </form>
@@ -296,6 +429,9 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
                     <td>{raffle.status}</td>
                     <td>
                       <div className="button-row">
+                        <button className="button-dark" type="button" onClick={() => startEdit(raffle)}>
+                          Editar
+                        </button>
                         <button
                           className="button-outline"
                           type="button"
@@ -319,6 +455,9 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
                               : drawingId === raffle.id
                                 ? "Sorteando..."
                                 : "Sortear"}
+                        </button>
+                        <button className="button-outline" type="button" onClick={() => void removeRaffle(raffle.id)}>
+                          Eliminar
                         </button>
                       </div>
                     </td>

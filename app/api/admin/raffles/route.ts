@@ -5,6 +5,10 @@ import { createRaffleService, listRaffleEntriesService, listRafflesService } fro
 const createSchema = z.object({
   title: z.string().min(3),
   description: z.string().min(5),
+  rulesText: z.string().optional(),
+  imageUrl: z.string().optional(),
+  ctaLabel: z.string().optional(),
+  ctaHref: z.string().optional(),
   isFree: z.boolean(),
   entryFee: z.number().min(0),
   paymentInstructions: z.string().min(2),
@@ -14,7 +18,10 @@ const createSchema = z.object({
   endDate: z.string().min(4),
   drawAt: z.string().min(4),
   numberPoolSize: z.number().int().min(1).max(5000),
-  status: z.enum(["draft", "published", "closed"])
+  status: z.enum(["draft", "published", "closed"]),
+  seoTitle: z.string().optional(),
+  seoDescription: z.string().optional(),
+  seoOgImage: z.string().optional()
 });
 
 export async function GET() {

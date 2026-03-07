@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminProposalForm } from "@/components/custom/admin-proposal-form";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { getCustomRequestBundleService, listEmailLogsService } from "@/lib/runtime-service";
 
 interface AdminSolicitudDetailPageProps {
@@ -10,6 +11,7 @@ interface AdminSolicitudDetailPageProps {
 export const dynamic = "force-dynamic";
 
 export default async function AdminSolicitudDetailPage({ params }: AdminSolicitudDetailPageProps) {
+  await requireAdminServerAccess();
   const { id } = await params;
   const bundle = await getCustomRequestBundleService(id);
 

@@ -1,9 +1,11 @@
 import { AdminTripsManager } from "@/components/custom/admin-trips-manager";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { listTripsService } from "@/lib/catalog-service";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminViajesPage() {
+  await requireAdminServerAccess();
   const trips = await listTripsService();
 
   return (

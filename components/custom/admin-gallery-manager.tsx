@@ -10,6 +10,9 @@ interface AdminGalleryManagerProps {
 export function AdminGalleryManager({ initialBundles }: AdminGalleryManagerProps) {
   const [bundles, setBundles] = useState(initialBundles);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [editingAlbumId, setEditingAlbumId] = useState<string | null>(null);
+  const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
   const [albumForm, setAlbumForm] = useState({
     tripSlug: "",
     title: "",
@@ -24,6 +27,41 @@ export function AdminGalleryManager({ initialBundles }: AdminGalleryManagerProps
     sortOrder: "0"
   });
 
+  function resetAlbumForm() {
+    setAlbumForm({ tripSlug: "", title: "", coverImage: "", featured: true });
+    setEditingAlbumId(null);
+  }
+
+  function resetMediaForm() {
+    setMediaForm({ albumId: "", type: "photo", url: "", caption: "", sortOrder: "0" });
+    setEditingMediaId(null);
+  }
+
+  function startEditAlbum(bundle: GalleryAlbumBundle) {
+    setEditingAlbumId(bundle.album.id);
+    setError(null);
+    setMessage(null);
+    setAlbumForm({
+      tripSlug: bundle.album.tripSlug,
+      title: bundle.album.title,
+      coverImage: bundle.album.coverImage,
+      featured: bundle.album.featured
+    });
+  }
+
+  function startEditMedia(media: GalleryAlbumBundle["media"][number]) {
+    setEditingMediaId(media.id);
+    setError(null);
+    setMessage(null);
+    setMediaForm({
+      albumId: media.albumId,
+      type: media.type,
+      url: media.url,
+      caption: media.caption,
+      sortOrder: String(media.sortOrder ?? 0)
+    });
+  }
+
   async function reload() {
     const response = await fetch("/api/admin/gallery/albums", { cache: "no-store" });
     const payload = (await response.json()) as { bundles?: GalleryAlbumBundle[]; message?: string };
@@ -33,32 +71,35 @@ export function AdminGalleryManager({ initialBundles }: AdminGalleryManagerProps
     setBundles(payload.bundles);
   }
 
-  async function handleCreateAlbum(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSaveAlbum(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setMessage(null);
     try {
-      const response = await fetch("/api/admin/gallery/albums", {
-        method: "POST",
+      const response = await fetch(editingAlbumId ? `/api/admin/gallery/albums/${editingAlbumId}` : "/api/admin/gallery/albums", {
+        method: editingAlbumId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(albumForm)
       });
       const payload = (await response.json()) as { message?: string };
       if (!response.ok) {
-        throw new Error(payload.message ?? "No se pudo crear álbum");
+        throw new Error(payload.message ?? `No se pudo ${editingAlbumId ? "actualizar" : "crear"} álbum`);
       }
       await reload();
-      setAlbumForm({ tripSlug: "", title: "", coverImage: "", featured: true });
+      setMessage(editingAlbumId ? "Álbum actualizado." : "Álbum creado.");
+      resetAlbumForm();
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Error inesperado");
     }
   }
 
-  async function handleCreateMedia(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSaveMedia(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setMessage(null);
     try {
-      const response = await fetch("/api/admin/gallery/media", {
-        method: "POST",
+      const response = await fetch(editingMediaId ? `/api/admin/gallery/media/${editingMediaId}` : "/api/admin/gallery/media", {
+        method: editingMediaId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           albumId: mediaForm.albumId,
@@ -70,19 +111,52 @@ export function AdminGalleryManager({ initialBundles }: AdminGalleryManagerProps
       });
       const payload = (await response.json()) as { message?: string };
       if (!response.ok) {
-        throw new Error(payload.message ?? "No se pudo crear media");
+        throw new Error(payload.message ?? `No se pudo ${editingMediaId ? "actualizar" : "crear"} media`);
       }
       await reload();
-      setMediaForm({ albumId: "", type: "photo", url: "", caption: "", sortOrder: "0" });
+      setMessage(editingMediaId ? "Media actualizada." : "Media creada.");
+      resetMediaForm();
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Error inesperado");
     }
   }
 
+  async function removeAlbum(albumId: string) {
+    setError(null);
+    setMessage(null);
+    const response = await fetch(`/api/admin/gallery/albums/${albumId}`, { method: "DELETE" });
+    const payload = (await response.json()) as { message?: string };
+    if (!response.ok) {
+      setError(payload.message ?? "No se pudo eliminar álbum");
+      return;
+    }
+    if (editingAlbumId === albumId) {
+      resetAlbumForm();
+    }
+    await reload();
+    setMessage("Álbum eliminado.");
+  }
+
+  async function removeMedia(mediaId: string) {
+    setError(null);
+    setMessage(null);
+    const response = await fetch(`/api/admin/gallery/media/${mediaId}`, { method: "DELETE" });
+    const payload = (await response.json()) as { message?: string };
+    if (!response.ok) {
+      setError(payload.message ?? "No se pudo eliminar media");
+      return;
+    }
+    if (editingMediaId === mediaId) {
+      resetMediaForm();
+    }
+    await reload();
+    setMessage("Media eliminada.");
+  }
+
   return (
     <>
-      <form className="card request-grid" onSubmit={handleCreateAlbum}>
-        <h3 className="request-full">Crear álbum</h3>
+      <form className="card request-grid" onSubmit={handleSaveAlbum}>
+        <h3 className="request-full">{editingAlbumId ? "Editar álbum" : "Crear álbum"}</h3>
         <label>
           Trip slug
           <input value={albumForm.tripSlug} onChange={(event) => setAlbumForm({ ...albumForm, tripSlug: event.target.value })} required />
@@ -102,11 +176,16 @@ export function AdminGalleryManager({ initialBundles }: AdminGalleryManagerProps
             <option value="no">No</option>
           </select>
         </label>
-        <button className="button-dark" type="submit">Guardar álbum</button>
+        <div className="button-row request-full">
+          <button className="button-dark" type="submit">{editingAlbumId ? "Actualizar álbum" : "Guardar álbum"}</button>
+          {editingAlbumId ? (
+            <button className="button-outline" type="button" onClick={resetAlbumForm}>Cancelar edición</button>
+          ) : null}
+        </div>
       </form>
 
-      <form className="card request-grid section" onSubmit={handleCreateMedia}>
-        <h3 className="request-full">Subir media (URL)</h3>
+      <form className="card request-grid section" onSubmit={handleSaveMedia}>
+        <h3 className="request-full">{editingMediaId ? "Editar media" : "Subir media (URL)"}</h3>
         <label>
           Álbum
           <select value={mediaForm.albumId} onChange={(event) => setMediaForm({ ...mediaForm, albumId: event.target.value })} required>
@@ -135,16 +214,48 @@ export function AdminGalleryManager({ initialBundles }: AdminGalleryManagerProps
           Orden
           <input type="number" value={mediaForm.sortOrder} onChange={(event) => setMediaForm({ ...mediaForm, sortOrder: event.target.value })} />
         </label>
-        <button className="button-dark" type="submit">Guardar media</button>
+        <div className="button-row request-full">
+          <button className="button-dark" type="submit">{editingMediaId ? "Actualizar media" : "Guardar media"}</button>
+          {editingMediaId ? (
+            <button className="button-outline" type="button" onClick={resetMediaForm}>Cancelar edición</button>
+          ) : null}
+        </div>
+        {message ? <p className="success request-full">{message}</p> : null}
         {error ? <p className="error request-full">{error}</p> : null}
       </form>
 
       <section className="stack-grid">
-        {bundles.map(({ album, media }) => (
-          <article key={album.id} className="card">
-            <h3>{album.title}</h3>
-            <p className="muted">{album.tripSlug}</p>
-            <p>{media.length} assets ({media.filter((item) => item.type === "video").length} videos)</p>
+        {bundles.map((bundle) => (
+          <article key={bundle.album.id} className="card">
+            <h3>{bundle.album.title}</h3>
+            <p className="muted">{bundle.album.tripSlug}</p>
+            <p>{bundle.media.length} assets ({bundle.media.filter((item) => item.type === "video").length} videos)</p>
+            <div className="button-row">
+              <button className="button-dark" type="button" onClick={() => startEditAlbum(bundle)}>
+                Editar álbum
+              </button>
+              <button className="button-outline" type="button" onClick={() => void removeAlbum(bundle.album.id)}>
+                Eliminar álbum
+              </button>
+            </div>
+            {bundle.media.length > 0 ? (
+              <div className="stack-grid" style={{ marginTop: "12px" }}>
+                {bundle.media.map((item) => (
+                  <article key={item.id} className="card">
+                    <p>{item.type.toUpperCase()} · {item.caption}</p>
+                    <p className="muted">{item.url}</p>
+                    <div className="button-row">
+                      <button className="button-dark" type="button" onClick={() => startEditMedia(item)}>
+                        Editar media
+                      </button>
+                      <button className="button-outline" type="button" onClick={() => void removeMedia(item.id)}>
+                        Eliminar media
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : null}
           </article>
         ))}
       </section>

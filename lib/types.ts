@@ -47,8 +47,15 @@ export interface Trip {
   packages: TripPackage[];
   addons: { id: string; name: string; price: number }[];
   hotels?: string[];
-  publishStatus?: "draft" | "published" | "unpublished";
+  shortDescription?: string;
+  longDescription?: string;
+  durationDays?: number;
+  galleryImages?: string[];
+  publishStatus?: "draft" | "published" | "unpublished" | "sold_out" | "archived";
   featured?: boolean;
+  seoTitle?: string;
+  seoDescription?: string;
+  seoOgImage?: string;
 }
 
 export interface Testimonial {
@@ -58,6 +65,12 @@ export interface Testimonial {
   quote: string;
   rating: number;
   verified: boolean;
+  approved?: boolean;
+  city?: string;
+  photoUrl?: string;
+  videoUrl?: string;
+  featured?: boolean;
+  publishStatus?: "draft" | "published" | "archived";
 }
 
 export interface Customer {
@@ -150,6 +163,7 @@ export interface GalleryMedia {
   type: "photo" | "video";
   url: string;
   caption: string;
+  sortOrder?: number;
 }
 
 export interface ReportSnapshot {
@@ -162,7 +176,11 @@ export interface ReportSnapshot {
 export interface Offer {
   id: string;
   title: string;
+  subtitle?: string;
   description: string;
+  imageUrl?: string;
+  ctaLabel?: string;
+  ctaHref?: string;
   code: string;
   discountType: "fixed" | "percent";
   value: number;
@@ -170,6 +188,10 @@ export interface Offer {
   startsAt?: string;
   endsAt?: string;
   active: boolean;
+  publishStatus?: "draft" | "published" | "archived";
+  seoTitle?: string;
+  seoDescription?: string;
+  seoOgImage?: string;
   createdAt: string;
 }
 
@@ -238,6 +260,10 @@ export interface Raffle {
   id: string;
   title: string;
   description: string;
+  rulesText?: string;
+  imageUrl?: string;
+  ctaLabel?: string;
+  ctaHref?: string;
   isFree: boolean;
   entryFee: number;
   paymentInstructions: string;
@@ -252,6 +278,9 @@ export interface Raffle {
   winnerCustomerEmail?: string;
   drawnAt?: string;
   status: RaffleStatus;
+  seoTitle?: string;
+  seoDescription?: string;
+  seoOgImage?: string;
   createdAt: string;
 }
 

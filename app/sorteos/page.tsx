@@ -1,19 +1,42 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import { listRafflesService } from "@/lib/raffles-service";
+import { GenericSectionsRenderer } from "@/components/cms/generic-sections";
+import { getCmsPageBundleService } from "@/lib/cms-service";
 import { formatMoney } from "@/lib/format";
+import { listRafflesService } from "@/lib/raffles-service";
 
 export const dynamic = "force-dynamic";
 
+export async function generateMetadata(): Promise<Metadata> {
+  const bundle = await getCmsPageBundleService("sorteos");
+  const title = bundle.page?.seoTitle ?? "Sorteos | Móntate en mi viaje";
+  const description = bundle.page?.seoDescription ?? "Sorteos y rifas con números únicos y countdown.";
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      images: bundle.page?.seoOgImage ? [{ url: bundle.page.seoOgImage }] : undefined
+    }
+  };
+}
+
 export default async function SorteosPage() {
-  const raffles = await listRafflesService({ includeClosed: true });
+  const [bundle, raffles] = await Promise.all([
+    getCmsPageBundleService("sorteos"),
+    listRafflesService({ includeClosed: true })
+  ]);
 
   return (
     <main className="container section">
       <header className="page-header">
-        <p className="chip">Sorteos y rifas</p>
-        <h1>Participa en premios y viajes</h1>
+        <p className="chip">{bundle.page?.heroBadge ?? "Sorteos"}</p>
+        <h1>{bundle.page?.heroTitle ?? "Participa en premios y viajes"}</h1>
         <p className="section-subtitle">
-          Para participar debes registrarte primero en <Link href="/registro">/registro</Link>.
+          {bundle.page?.heroSubtitle ?? "Debes registrarte para participar en rifas y sorteos."}{" "}
+          <Link href="/registro">/registro</Link>
         </p>
       </header>
 
@@ -30,21 +53,39 @@ export default async function SorteosPage() {
                 <p>{raffle.isFree ? "Entrada libre" : `Entrada ${formatMoney(raffle.entryFee)}`}</p>
               </div>
             </div>
-            <p><strong>Premio:</strong> {raffle.prize}</p>
-            <p><strong>Requisitos:</strong> {raffle.requirements}</p>
-            <p><strong>Números disponibles totales:</strong> {raffle.numberPoolSize}</p>
-            <p><strong>Anuncio ganador:</strong> {new Date(raffle.drawAt).toLocaleString("es-ES")}</p>
+            <p>
+              <strong>Premio:</strong> {raffle.prize}
+            </p>
+            <p>
+              <strong>Requisitos:</strong> {raffle.requirements}
+            </p>
+            <p>
+              <strong>Números disponibles totales:</strong> {raffle.numberPoolSize}
+            </p>
+            <p>
+              <strong>Anuncio ganador:</strong> {new Date(raffle.drawAt).toLocaleString("es-ES")}
+            </p>
             {!raffle.isFree ? (
-              <p><strong>Pago:</strong> {raffle.paymentInstructions}</p>
+              <p>
+                <strong>Pago:</strong> {raffle.paymentInstructions}
+              </p>
             ) : null}
-            <p className="muted">{raffle.startDate} - {raffle.endDate}</p>
-            {raffle.winnerNumber ? <p><strong>Número ganador:</strong> #{raffle.winnerNumber}</p> : null}
+            <p className="muted">
+              {raffle.startDate} - {raffle.endDate}
+            </p>
+            {raffle.winnerNumber ? (
+              <p>
+                <strong>Número ganador:</strong> #{raffle.winnerNumber}
+              </p>
+            ) : null}
             <Link className="button-dark" href={`/sorteos/${raffle.id}`}>
               {raffle.status === "published" ? "Ver detalle y participar" : "Ver resultado"}
             </Link>
           </article>
         ))}
       </section>
+
+      <GenericSectionsRenderer sections={bundle.sections.filter((section) => section.sectionType !== "page_intro")} />
     </main>
   );
 }

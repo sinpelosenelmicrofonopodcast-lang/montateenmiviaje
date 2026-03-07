@@ -1,4 +1,5 @@
 import { formatMoney } from "@/lib/format";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { getPipelineSummaryService, listBookingsService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,7 @@ const stageLabels: Record<string, string> = {
 };
 
 export default async function AdminReservasPage() {
+  await requireAdminServerAccess();
   const [pipeline, bookings] = await Promise.all([getPipelineSummaryService(), listBookingsService()]);
 
   return (

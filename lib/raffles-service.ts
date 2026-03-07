@@ -11,6 +11,10 @@ export interface RegisterCustomerInput {
 export interface CreateRaffleInput {
   title: string;
   description: string;
+  rulesText?: string;
+  imageUrl?: string;
+  ctaLabel?: string;
+  ctaHref?: string;
   isFree: boolean;
   entryFee: number;
   paymentInstructions: string;
@@ -21,6 +25,9 @@ export interface CreateRaffleInput {
   drawAt: string;
   numberPoolSize: number;
   status: Raffle["status"];
+  seoTitle?: string;
+  seoDescription?: string;
+  seoOgImage?: string;
 }
 
 export interface DrawRaffleWinnerResult {
@@ -42,6 +49,10 @@ interface AppRaffleRow {
   id: string;
   title: string;
   description: string;
+  rules_text: string | null;
+  image_url: string | null;
+  cta_label: string | null;
+  cta_href: string | null;
   is_free: boolean;
   entry_fee: number;
   payment_instructions: string;
@@ -56,6 +67,9 @@ interface AppRaffleRow {
   winner_customer_email: string | null;
   drawn_at: string | null;
   status: Raffle["status"];
+  seo_title: string | null;
+  seo_description: string | null;
+  seo_og_image: string | null;
   created_at: string;
 }
 
@@ -91,6 +105,10 @@ function mapRaffle(row: AppRaffleRow): Raffle {
     id: row.id,
     title: row.title,
     description: row.description,
+    rulesText: row.rules_text ?? undefined,
+    imageUrl: row.image_url ?? undefined,
+    ctaLabel: row.cta_label ?? undefined,
+    ctaHref: row.cta_href ?? undefined,
     isFree: row.is_free,
     entryFee: Number(row.entry_fee),
     paymentInstructions: row.payment_instructions,
@@ -105,6 +123,9 @@ function mapRaffle(row: AppRaffleRow): Raffle {
     winnerCustomerEmail: row.winner_customer_email ?? undefined,
     drawnAt: row.drawn_at ?? undefined,
     status: row.status,
+    seoTitle: row.seo_title ?? undefined,
+    seoDescription: row.seo_description ?? undefined,
+    seoOgImage: row.seo_og_image ?? undefined,
     createdAt: row.created_at
   };
 }
@@ -454,6 +475,10 @@ export async function createRaffleService(input: CreateRaffleInput) {
     .insert({
       title: input.title,
       description: input.description,
+      rules_text: input.rulesText ?? input.requirements,
+      image_url: input.imageUrl ?? null,
+      cta_label: input.ctaLabel ?? null,
+      cta_href: input.ctaHref ?? null,
       is_free: input.isFree,
       entry_fee: input.isFree ? 0 : input.entryFee,
       payment_instructions: input.isFree ? "No requiere pago." : input.paymentInstructions,
@@ -463,7 +488,10 @@ export async function createRaffleService(input: CreateRaffleInput) {
       end_date: input.endDate,
       draw_at: drawAt.toISOString(),
       number_pool_size: input.numberPoolSize,
-      status: input.status
+      status: input.status,
+      seo_title: input.seoTitle ?? null,
+      seo_description: input.seoDescription ?? null,
+      seo_og_image: input.seoOgImage ?? null
     })
     .select("*")
     .single<AppRaffleRow>();
@@ -633,6 +661,60 @@ export async function updateRaffleStatusService(raffleId: string, status: Raffle
   }
 
   return mapRaffle(updated.data);
+}
+
+export async function updateRaffleService(
+  raffleId: string,
+  input: Partial<CreateRaffleInput>
+) {
+  ensureConfigured();
+  const supabase = getSupabaseAdminClient();
+  const payload: Record<string, unknown> = {};
+
+  if (typeof input.title === "string") payload.title = input.title.trim();
+  if (typeof input.description === "string") payload.description = input.description.trim();
+  if (typeof input.rulesText === "string") payload.rules_text = input.rulesText.trim();
+  if (typeof input.imageUrl === "string") payload.image_url = input.imageUrl.trim() || null;
+  if (typeof input.ctaLabel === "string") payload.cta_label = input.ctaLabel.trim() || null;
+  if (typeof input.ctaHref === "string") payload.cta_href = input.ctaHref.trim() || null;
+  if (typeof input.isFree === "boolean") payload.is_free = input.isFree;
+  if (typeof input.entryFee === "number") payload.entry_fee = input.entryFee;
+  if (typeof input.paymentInstructions === "string") payload.payment_instructions = input.paymentInstructions.trim();
+  if (typeof input.requirements === "string") payload.requirements = input.requirements.trim();
+  if (typeof input.prize === "string") payload.prize = input.prize.trim();
+  if (typeof input.startDate === "string") payload.start_date = input.startDate;
+  if (typeof input.endDate === "string") payload.end_date = input.endDate;
+  if (typeof input.drawAt === "string") payload.draw_at = new Date(input.drawAt).toISOString();
+  if (typeof input.numberPoolSize === "number") payload.number_pool_size = input.numberPoolSize;
+  if (typeof input.status === "string") payload.status = input.status;
+  if (typeof input.seoTitle === "string") payload.seo_title = input.seoTitle.trim() || null;
+  if (typeof input.seoDescription === "string") payload.seo_description = input.seoDescription.trim() || null;
+  if (typeof input.seoOgImage === "string") payload.seo_og_image = input.seoOgImage.trim() || null;
+
+  const updated = await supabase
+    .from("app_raffles")
+    .update(payload)
+    .eq("id", raffleId)
+    .select("*")
+    .single<AppRaffleRow>();
+
+  if (updated.error || !updated.data) {
+    throw new Error(`No se pudo actualizar sorteo: ${updated.error?.message ?? "sin datos"}`);
+  }
+
+  return mapRaffle(updated.data);
+}
+
+export async function deleteRaffleService(raffleId: string) {
+  ensureConfigured();
+  const supabase = getSupabaseAdminClient();
+  const result = await supabase.from("app_raffles").delete().eq("id", raffleId);
+
+  if (result.error) {
+    throw new Error(`No se pudo eliminar sorteo: ${result.error.message}`);
+  }
+
+  return { ok: true };
 }
 
 export async function drawRaffleWinnerService(raffleId: string) {

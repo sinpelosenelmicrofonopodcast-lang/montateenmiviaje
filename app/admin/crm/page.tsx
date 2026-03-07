@@ -1,9 +1,11 @@
 import { formatMoney } from "@/lib/format";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { listCustomersService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminCrmPage() {
+  await requireAdminServerAccess();
   const customers = await listCustomersService();
 
   return (

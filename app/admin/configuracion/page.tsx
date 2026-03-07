@@ -1,32 +1,23 @@
-export default function AdminConfiguracionPage() {
+import { AdminSiteSettingsManager } from "@/components/custom/admin-site-settings-manager";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
+import { listSiteSettingsService } from "@/lib/cms-service";
+
+export const dynamic = "force-dynamic";
+
+export default async function AdminConfiguracionPage() {
+  await requireAdminServerAccess();
+  const settings = await listSiteSettingsService();
+
   return (
     <main className="container section">
       <header className="page-header">
-        <h1>Configuración</h1>
-        <p className="section-subtitle">Roles, permisos, branding e integraciones.</p>
+        <h1>Configuración global</h1>
+        <p className="section-subtitle">
+          Gestiona branding, contacto, social, favicon, logo y campos de analytics sin tocar código.
+        </p>
       </header>
 
-      <section className="stack-grid">
-        <article className="card">
-          <h3>Roles</h3>
-          <ul>
-            <li>Admin: control total</li>
-            <li>Manager: viajes, reservas, pagos y CRM</li>
-            <li>Support: atención cliente y documentos</li>
-            <li>Editor: contenido web, galería, testimonios</li>
-          </ul>
-        </article>
-
-        <article className="card">
-          <h3>Integraciones</h3>
-          <ul>
-            <li>PayPal Checkout: activo</li>
-            <li>WhatsApp Cloud API: pendiente conectar</li>
-            <li>Email transaccional (Resend/SendGrid): pendiente conectar</li>
-            <li>Supabase Auth/Storage: schema listo para conectar</li>
-          </ul>
-        </article>
-      </section>
+      <AdminSiteSettingsManager initialSettings={settings} />
     </main>
   );
 }

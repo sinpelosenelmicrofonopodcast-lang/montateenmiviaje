@@ -1,9 +1,11 @@
 import { listAutomationRulesService } from "@/lib/catalog-service";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { listAutomationRunsService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminAutomatizacionesPage() {
+  await requireAdminServerAccess();
   const [runs, automationRules] = await Promise.all([
     listAutomationRunsService(),
     listAutomationRulesService()

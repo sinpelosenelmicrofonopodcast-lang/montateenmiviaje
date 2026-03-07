@@ -1,9 +1,11 @@
 import { formatMoney } from "@/lib/format";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { listPaymentsService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminPagosPage() {
+  await requireAdminServerAccess();
   const payments = await listPaymentsService();
 
   return (

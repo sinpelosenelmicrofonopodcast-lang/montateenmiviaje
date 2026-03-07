@@ -10,18 +10,75 @@ interface AdminOffersManagerProps {
 
 export function AdminOffersManager({ initialOffers }: AdminOffersManagerProps) {
   const [offers, setOffers] = useState(initialOffers);
+  const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: "",
+    subtitle: "",
     description: "",
+    imageUrl: "",
+    ctaLabel: "",
+    ctaHref: "",
     code: "",
     discountType: "percent",
     value: "",
     tripSlug: "",
     startsAt: "",
     endsAt: "",
-    active: true
+    active: true,
+    publishStatus: "published"
   });
+
+  function toDateTimeLocal(value?: string) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const tzOffsetMs = date.getTimezoneOffset() * 60_000;
+    return new Date(date.getTime() - tzOffsetMs).toISOString().slice(0, 16);
+  }
+
+  function resetForm() {
+    setForm({
+      title: "",
+      subtitle: "",
+      description: "",
+      imageUrl: "",
+      ctaLabel: "",
+      ctaHref: "",
+      code: "",
+      discountType: "percent",
+      value: "",
+      tripSlug: "",
+      startsAt: "",
+      endsAt: "",
+      active: true,
+      publishStatus: "published"
+    });
+    setEditingOfferId(null);
+  }
+
+  function startEdit(offer: Offer) {
+    setEditingOfferId(offer.id);
+    setError(null);
+    setMessage(null);
+    setForm({
+      title: offer.title,
+      subtitle: offer.subtitle ?? "",
+      description: offer.description,
+      imageUrl: offer.imageUrl ?? "",
+      ctaLabel: offer.ctaLabel ?? "",
+      ctaHref: offer.ctaHref ?? "",
+      code: offer.code,
+      discountType: offer.discountType,
+      value: String(offer.value),
+      tripSlug: offer.tripSlug ?? "",
+      startsAt: toDateTimeLocal(offer.startsAt),
+      endsAt: toDateTimeLocal(offer.endsAt),
+      active: offer.active,
+      publishStatus: offer.publishStatus ?? "published"
+    });
+  }
 
   async function reload() {
     const response = await fetch("/api/admin/offers", { cache: "no-store" });
@@ -32,41 +89,40 @@ export function AdminOffersManager({ initialOffers }: AdminOffersManagerProps) {
     setOffers(payload.offers);
   }
 
-  async function handleCreate(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSave(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setMessage(null);
     try {
-      const response = await fetch("/api/admin/offers", {
-        method: "POST",
+      const body = {
+        title: form.title,
+        subtitle: form.subtitle || undefined,
+        description: form.description,
+        imageUrl: form.imageUrl || undefined,
+        ctaLabel: form.ctaLabel || undefined,
+        ctaHref: form.ctaHref || undefined,
+        code: form.code,
+        discountType: form.discountType,
+        value: Number(form.value),
+        tripSlug: form.tripSlug || undefined,
+        startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : "",
+        endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : "",
+        active: form.active,
+        publishStatus: form.publishStatus
+      };
+
+      const response = await fetch(editingOfferId ? `/api/admin/offers/${editingOfferId}` : "/api/admin/offers", {
+        method: editingOfferId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: form.title,
-          description: form.description,
-          code: form.code,
-          discountType: form.discountType,
-          value: Number(form.value),
-          tripSlug: form.tripSlug || undefined,
-          startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : undefined,
-          endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : undefined,
-          active: form.active
-        })
+        body: JSON.stringify(body)
       });
-      const payload = (await response.json()) as { message?: string };
+      const result = (await response.json()) as { message?: string };
       if (!response.ok) {
-        throw new Error(payload.message ?? "No se pudo crear oferta");
+        throw new Error(result.message ?? `No se pudo ${editingOfferId ? "actualizar" : "crear"} oferta`);
       }
       await reload();
-      setForm({
-        title: "",
-        description: "",
-        code: "",
-        discountType: "percent",
-        value: "",
-        tripSlug: "",
-        startsAt: "",
-        endsAt: "",
-        active: true
-      });
+      setMessage(editingOfferId ? "Oferta actualizada." : "Oferta creada.");
+      resetForm();
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Error inesperado");
     }
@@ -87,10 +143,26 @@ export function AdminOffersManager({ initialOffers }: AdminOffersManagerProps) {
     await reload();
   }
 
+  async function deleteOffer(offerId: string) {
+    setError(null);
+    setMessage(null);
+    const response = await fetch(`/api/admin/offers/${offerId}`, { method: "DELETE" });
+    const payload = (await response.json()) as { message?: string };
+    if (!response.ok) {
+      setError(payload.message ?? "No se pudo eliminar oferta");
+      return;
+    }
+    if (editingOfferId === offerId) {
+      resetForm();
+    }
+    await reload();
+    setMessage("Oferta eliminada.");
+  }
+
   return (
     <>
-      <form className="card request-grid" onSubmit={handleCreate}>
-        <h3 className="request-full">Crear oferta</h3>
+      <form className="card request-grid" onSubmit={handleSave}>
+        <h3 className="request-full">{editingOfferId ? "Editar oferta" : "Crear oferta"}</h3>
         <label>
           Título
           <input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required />
@@ -99,9 +171,25 @@ export function AdminOffersManager({ initialOffers }: AdminOffersManagerProps) {
           Código
           <input value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value })} required />
         </label>
+        <label>
+          Subtítulo
+          <input value={form.subtitle} onChange={(event) => setForm({ ...form, subtitle: event.target.value })} />
+        </label>
         <label className="request-full">
           Descripción
           <textarea rows={3} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} required />
+        </label>
+        <label className="request-full">
+          Imagen URL
+          <input value={form.imageUrl} onChange={(event) => setForm({ ...form, imageUrl: event.target.value })} />
+        </label>
+        <label>
+          CTA label
+          <input value={form.ctaLabel} onChange={(event) => setForm({ ...form, ctaLabel: event.target.value })} />
+        </label>
+        <label>
+          CTA href
+          <input value={form.ctaHref} onChange={(event) => setForm({ ...form, ctaHref: event.target.value })} />
         </label>
         <label>
           Tipo
@@ -133,7 +221,25 @@ export function AdminOffersManager({ initialOffers }: AdminOffersManagerProps) {
             <option value="no">No</option>
           </select>
         </label>
-        <button className="button-dark" type="submit">Guardar oferta</button>
+        <label>
+          Publish status
+          <select value={form.publishStatus} onChange={(event) => setForm({ ...form, publishStatus: event.target.value })}>
+            <option value="published">published</option>
+            <option value="draft">draft</option>
+            <option value="archived">archived</option>
+          </select>
+        </label>
+        <div className="button-row request-full">
+          <button className="button-dark" type="submit">
+            {editingOfferId ? "Actualizar oferta" : "Guardar oferta"}
+          </button>
+          {editingOfferId ? (
+            <button className="button-outline" type="button" onClick={resetForm}>
+              Cancelar edición
+            </button>
+          ) : null}
+        </div>
+        {message ? <p className="success request-full">{message}</p> : null}
         {error ? <p className="error request-full">{error}</p> : null}
       </form>
 
@@ -142,6 +248,7 @@ export function AdminOffersManager({ initialOffers }: AdminOffersManagerProps) {
           <article key={offer.id} className="card">
             <p className="chip">{offer.discountType === "percent" ? "Percent" : "Fixed"}</p>
             <h3>{offer.title}</h3>
+            {offer.subtitle ? <p className="muted">{offer.subtitle}</p> : null}
             <p>{offer.description}</p>
             <p>Código: <strong>{offer.code}</strong></p>
             <p>
@@ -150,10 +257,16 @@ export function AdminOffersManager({ initialOffers }: AdminOffersManagerProps) {
                 {offer.discountType === "percent" ? `${offer.value}%` : formatMoney(offer.value)}
               </strong>
             </p>
-            <p>Estado: {offer.active ? "Activa" : "Inactiva"}</p>
+            <p>Estado: {offer.active ? "Activa" : "Inactiva"} · {offer.publishStatus ?? "published"}</p>
             <div className="button-row">
+              <button className="button-dark" type="button" onClick={() => startEdit(offer)}>
+                Editar
+              </button>
               <button className="button-outline" type="button" onClick={() => void toggleOffer(offer)}>
                 {offer.active ? "Desactivar" : "Activar"}
+              </button>
+              <button className="button-outline" type="button" onClick={() => void deleteOffer(offer.id)}>
+                Eliminar
               </button>
             </div>
           </article>

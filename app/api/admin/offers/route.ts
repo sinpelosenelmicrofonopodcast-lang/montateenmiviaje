@@ -4,14 +4,22 @@ import { createOfferService, listOffersService } from "@/lib/catalog-service";
 
 const schema = z.object({
   title: z.string().min(3),
+  subtitle: z.string().optional(),
   description: z.string().min(5),
+  imageUrl: z.string().optional(),
+  ctaLabel: z.string().optional(),
+  ctaHref: z.string().optional(),
   code: z.string().min(3),
   discountType: z.enum(["fixed", "percent"]),
   value: z.number().positive(),
   tripSlug: z.string().optional(),
   startsAt: z.string().optional(),
   endsAt: z.string().optional(),
-  active: z.boolean().default(true)
+  active: z.boolean().default(true),
+  publishStatus: z.enum(["draft", "published", "archived"]).optional(),
+  seoTitle: z.string().optional(),
+  seoDescription: z.string().optional(),
+  seoOgImage: z.string().optional()
 });
 
 export async function GET() {

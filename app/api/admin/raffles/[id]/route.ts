@@ -1,9 +1,27 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { updateRaffleStatusService } from "@/lib/raffles-service";
+import { deleteRaffleService, updateRaffleService, updateRaffleStatusService } from "@/lib/raffles-service";
 
 const schema = z.object({
-  status: z.enum(["draft", "published", "closed"])
+  title: z.string().optional(),
+  description: z.string().optional(),
+  rulesText: z.string().optional(),
+  imageUrl: z.string().optional(),
+  ctaLabel: z.string().optional(),
+  ctaHref: z.string().optional(),
+  isFree: z.boolean().optional(),
+  entryFee: z.number().optional(),
+  paymentInstructions: z.string().optional(),
+  requirements: z.string().optional(),
+  prize: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  drawAt: z.string().optional(),
+  numberPoolSize: z.number().int().optional(),
+  status: z.enum(["draft", "published", "closed"]).optional(),
+  seoTitle: z.string().optional(),
+  seoDescription: z.string().optional(),
+  seoOgImage: z.string().optional()
 });
 
 export async function PATCH(
@@ -13,7 +31,9 @@ export async function PATCH(
   try {
     const { id } = await params;
     const payload = schema.parse(await request.json());
-    const raffle = await updateRaffleStatusService(id, payload.status);
+    const raffle = payload.status && Object.keys(payload).length === 1
+      ? await updateRaffleStatusService(id, payload.status)
+      : await updateRaffleService(id, payload);
     if (!raffle) {
       return NextResponse.json({ message: "Sorteo no encontrado" }, { status: 404 });
     }
@@ -26,5 +46,19 @@ export async function PATCH(
 
     const message = error instanceof Error ? error.message : "Error interno";
     return NextResponse.json({ message }, { status: 400 });
+  }
+}
+
+export async function DELETE(
+  _: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const result = await deleteRaffleService(id);
+    return NextResponse.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Error interno";
+    return NextResponse.json({ message }, { status: 500 });
   }
 }

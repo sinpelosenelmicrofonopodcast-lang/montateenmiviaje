@@ -13,13 +13,20 @@ const tripSchema = z.object({
   totalSpots: z.number().int().min(1),
   heroImage: z.string().url(),
   summary: z.string().min(10),
+  shortDescription: z.string().optional(),
+  longDescription: z.string().optional(),
+  durationDays: z.number().int().positive().optional(),
+  galleryImages: z.array(z.string()).optional(),
   includes: z.array(z.string()).default([]),
   excludes: z.array(z.string()).default([]),
   policies: z.array(z.string()).default([]),
   requirements: z.array(z.string()).default([]),
   hotels: z.array(z.string()).default([]),
-  publishStatus: z.enum(["draft", "published", "unpublished"]),
-  featured: z.boolean().default(false)
+  publishStatus: z.enum(["draft", "published", "unpublished", "sold_out", "archived"]),
+  featured: z.boolean().default(false),
+  seoTitle: z.string().optional(),
+  seoDescription: z.string().optional(),
+  seoOgImage: z.string().optional()
 });
 
 export async function GET() {

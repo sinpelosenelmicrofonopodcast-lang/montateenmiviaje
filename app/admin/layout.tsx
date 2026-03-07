@@ -1,10 +1,5 @@
-import { AdminLogoutButton } from "@/components/custom/admin-logout-button";
+import { AdminShell } from "@/components/custom/admin-shell";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      {children}
-      <AdminLogoutButton />
-    </>
-  );
+  return <AdminShell>{children}</AdminShell>;
 }

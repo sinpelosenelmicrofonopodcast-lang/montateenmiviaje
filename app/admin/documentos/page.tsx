@@ -1,8 +1,10 @@
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { listDocumentsService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminDocumentosPage() {
+  await requireAdminServerAccess();
   const docs = await listDocumentsService();
 
   return (

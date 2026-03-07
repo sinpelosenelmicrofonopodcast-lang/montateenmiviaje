@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { formatMoney } from "@/lib/format";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { listCustomTripRequestsService } from "@/lib/runtime-service";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminSolicitudesPage() {
+  await requireAdminServerAccess();
   const requests = await listCustomTripRequestsService();
 
   return (

@@ -8,7 +8,12 @@ const schema = z.object({
   quote: z.string().min(5),
   rating: z.number().int().min(1).max(5),
   verified: z.boolean().default(false),
-  approved: z.boolean().default(false)
+  approved: z.boolean().default(false),
+  city: z.string().optional(),
+  photoUrl: z.string().optional(),
+  videoUrl: z.string().optional(),
+  featured: z.boolean().optional(),
+  publishStatus: z.enum(["draft", "published", "archived"]).optional()
 });
 
 export async function GET() {

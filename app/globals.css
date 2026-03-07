@@ -60,11 +60,18 @@ h4 {
 }
 
 .nav-shell {
-  height: 76px;
+  min-height: 92px;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: start;
+  gap: 10px;
+  padding: 10px 0 12px;
+}
+
+.brand-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
+  justify-content: flex-start;
 }
 
 .brand {
@@ -77,71 +84,40 @@ h4 {
 
 .brand img {
   width: auto;
-  height: 56px;
+  height: 54px;
 }
 
 .brand-name {
   font-family: "Cormorant Garamond", Georgia, serif;
   font-weight: 700;
-  font-size: 30px;
+  font-size: clamp(2rem, 3.3vw, 3rem);
   letter-spacing: 0.3px;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .nav-links {
   display: flex;
-  gap: var(--space-3);
+  gap: 10px;
   font-size: 14px;
-  margin-left: auto;
-  flex-wrap: nowrap;
+  margin-left: 0;
+}
+
+.nav-links-desktop {
+  flex-wrap: wrap;
 }
 
 .nav-links-desktop a {
   white-space: nowrap;
-}
-
-.nav-mobile {
-  display: none;
-}
-
-.nav-mobile-trigger {
-  list-style: none;
-  cursor: pointer;
-  border: 1px solid #d9d9d9;
+  border: 1px solid #dcdcdc;
   border-radius: 999px;
-  padding: 10px 14px;
-  font-size: 14px;
-  font-weight: 700;
+  padding: 7px 11px;
   background: #fff;
+  font-size: 13px;
   line-height: 1;
 }
 
-.nav-mobile-trigger::-webkit-details-marker {
+.nav-links-mobile {
   display: none;
-}
-
-.nav-mobile-panel {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 10px);
-  width: min(92vw, 320px);
-  background: #fff;
-  border: 1px solid #ececec;
-  border-radius: 14px;
-  padding: 10px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
-  display: grid;
-  gap: 6px;
-  z-index: 30;
-}
-
-.nav-mobile-link {
-  padding: 10px 12px;
-  border-radius: 10px;
-}
-
-.nav-mobile-link:hover {
-  background: #f5f5f5;
 }
 
 .site-footer {
@@ -660,11 +636,68 @@ th {
   background: var(--white);
 }
 
+.admin-cms-shell {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.admin-cms-preview {
+  position: sticky;
+  top: 96px;
+}
+
+.admin-preview-frame {
+  width: 100%;
+  height: min(76vh, 900px);
+  border: 1px solid #ececec;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.admin-layout-shell {
+  width: min(100% - 32px, 1320px);
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.admin-sidebar {
+  position: sticky;
+  top: 92px;
+}
+
+.admin-sidebar h3 {
+  margin-top: 8px;
+}
+
+.admin-sidebar-nav {
+  margin-top: var(--space-3);
+  display: grid;
+  gap: 6px;
+}
+
+.admin-sidebar-link {
+  border: 1px solid #ececec;
+  border-radius: 10px;
+  padding: 9px 10px;
+  font-size: 14px;
+  background: #fff;
+}
+
+.admin-sidebar-link.active {
+  border-color: #000;
+  background: #f3f3f3;
+  font-weight: 700;
+}
+
 @media (max-width: 980px) {
   .nav-shell {
-    height: auto;
     min-height: 72px;
-    padding: 10px 0;
+    gap: 8px;
   }
 
   .brand img {
@@ -672,22 +705,37 @@ th {
   }
 
   .brand-name {
-    font-size: clamp(1.7rem, 4.6vw, 2rem);
-    line-height: 1;
+    font-size: clamp(1.7rem, 6vw, 2.3rem);
+    line-height: 1.05;
   }
 
   .nav-links-desktop {
     display: none;
   }
 
-  .nav-mobile {
-    display: block;
-    position: relative;
-    margin-left: auto;
+  .brand-row {
+    width: 100%;
   }
 
-  .nav-links {
+  .nav-links-mobile {
+    display: flex;
+    width: 100%;
+    overflow-x: auto;
+    white-space: nowrap;
+    gap: 10px;
     margin-left: 0;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .nav-links-mobile a {
+    border: 1px solid #dcdcdc;
+    border-radius: 999px;
+    padding: 8px 12px;
+    background: #fff;
+    font-size: 13px;
+    line-height: 1;
   }
 
   .admin-logout-button {
@@ -701,6 +749,8 @@ th {
   .trip-detail-shell,
   .admin-grid,
   .kpi-grid,
+  .admin-cms-shell,
+  .admin-layout-shell,
   .request-grid,
   .builder-grid,
   .builder-cols,
@@ -714,6 +764,10 @@ th {
 
   .hero {
     padding: var(--space-5) 0;
+  }
+
+  .admin-sidebar {
+    position: static;
   }
 
   .hero-shell {
@@ -746,10 +800,8 @@ th {
   }
 
   .brand-name {
-    font-size: 1.9rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 1.6rem;
+    white-space: normal;
   }
 
   .hero-shell {

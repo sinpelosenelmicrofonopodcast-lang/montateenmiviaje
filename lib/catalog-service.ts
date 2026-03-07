@@ -22,13 +22,20 @@ interface AppTripRow {
   total_spots: number;
   hero_image: string;
   summary: string;
+  short_description: string | null;
+  long_description: string | null;
+  duration_days: number | null;
+  gallery_images: string[] | null;
   includes: string[] | null;
   excludes: string[] | null;
   policies: string[] | null;
   requirements: string[] | null;
   hotels: string[] | null;
-  publish_status: "draft" | "published" | "unpublished";
+  publish_status: "draft" | "published" | "unpublished" | "sold_out" | "archived";
   featured: boolean;
+  seo_title: string | null;
+  seo_description: string | null;
+  seo_og_image: string | null;
   created_at: string;
 }
 
@@ -66,6 +73,11 @@ interface AppTestimonialRow {
   rating: number;
   verified: boolean;
   approved: boolean;
+  city: string | null;
+  photo_url: string | null;
+  video_url: string | null;
+  featured: boolean;
+  publish_status: "draft" | "published" | "archived";
 }
 
 interface AppGalleryAlbumRow {
@@ -88,7 +100,11 @@ interface AppGalleryMediaRow {
 interface AppOfferRow {
   id: string;
   title: string;
+  subtitle: string | null;
   description: string;
+  image_url: string | null;
+  cta_label: string | null;
+  cta_href: string | null;
   code: string;
   discount_type: "fixed" | "percent";
   value: number;
@@ -96,6 +112,10 @@ interface AppOfferRow {
   starts_at: string | null;
   ends_at: string | null;
   active: boolean;
+  publish_status: "draft" | "published" | "archived";
+  seo_title: string | null;
+  seo_description: string | null;
+  seo_og_image: string | null;
   created_at: string;
 }
 
@@ -130,13 +150,20 @@ export interface CreateTripInput {
   totalSpots: number;
   heroImage: string;
   summary: string;
+  shortDescription?: string;
+  longDescription?: string;
+  durationDays?: number;
+  galleryImages?: string[];
   includes: string[];
   excludes: string[];
   policies: string[];
   requirements: string[];
   hotels: string[];
-  publishStatus: "draft" | "published" | "unpublished";
+  publishStatus: "draft" | "published" | "unpublished" | "sold_out" | "archived";
   featured: boolean;
+  seoTitle?: string;
+  seoDescription?: string;
+  seoOgImage?: string;
 }
 
 export interface UpsertTripPackageInput {
@@ -165,6 +192,11 @@ export interface CreateTestimonialInput {
   rating: number;
   verified: boolean;
   approved: boolean;
+  city?: string;
+  photoUrl?: string;
+  videoUrl?: string;
+  featured?: boolean;
+  publishStatus?: "draft" | "published" | "archived";
 }
 
 export interface CreateGalleryAlbumInput {
@@ -172,6 +204,13 @@ export interface CreateGalleryAlbumInput {
   title: string;
   coverImage: string;
   featured: boolean;
+}
+
+export interface UpdateGalleryAlbumInput {
+  tripSlug?: string;
+  title?: string;
+  coverImage?: string;
+  featured?: boolean;
 }
 
 export interface CreateGalleryMediaInput {
@@ -182,9 +221,21 @@ export interface CreateGalleryMediaInput {
   sortOrder?: number;
 }
 
+export interface UpdateGalleryMediaInput {
+  albumId?: string;
+  type?: "photo" | "video";
+  url?: string;
+  caption?: string;
+  sortOrder?: number;
+}
+
 export interface CreateOfferInput {
   title: string;
+  subtitle?: string;
   description: string;
+  imageUrl?: string;
+  ctaLabel?: string;
+  ctaHref?: string;
   code: string;
   discountType: "fixed" | "percent";
   value: number;
@@ -192,6 +243,10 @@ export interface CreateOfferInput {
   startsAt?: string;
   endsAt?: string;
   active: boolean;
+  publishStatus?: "draft" | "published" | "archived";
+  seoTitle?: string;
+  seoDescription?: string;
+  seoOgImage?: string;
 }
 
 function ensureConfigured() {
@@ -222,6 +277,10 @@ function mapTrip(
     totalSpots: trip.total_spots,
     heroImage: trip.hero_image,
     summary: trip.summary,
+    shortDescription: trip.short_description ?? undefined,
+    longDescription: trip.long_description ?? undefined,
+    durationDays: trip.duration_days ?? undefined,
+    galleryImages: trip.gallery_images ?? [],
     includes: trip.includes ?? [],
     excludes: trip.excludes ?? [],
     policies: trip.policies ?? [],
@@ -250,7 +309,10 @@ function mapTrip(
         price: Number(item.price)
       })),
     publishStatus: trip.publish_status,
-    featured: trip.featured
+    featured: trip.featured,
+    seoTitle: trip.seo_title ?? undefined,
+    seoDescription: trip.seo_description ?? undefined,
+    seoOgImage: trip.seo_og_image ?? undefined
   };
 }
 
@@ -384,13 +446,20 @@ export async function createTripService(input: CreateTripInput) {
       total_spots: input.totalSpots,
       hero_image: input.heroImage.trim(),
       summary: input.summary.trim(),
+      short_description: input.shortDescription?.trim() || null,
+      long_description: input.longDescription?.trim() || null,
+      duration_days: input.durationDays ?? null,
+      gallery_images: toTextArray(input.galleryImages ?? []),
       includes: toTextArray(input.includes),
       excludes: toTextArray(input.excludes),
       policies: toTextArray(input.policies),
       requirements: toTextArray(input.requirements),
       hotels: toTextArray(input.hotels),
       publish_status: input.publishStatus,
-      featured: input.featured
+      featured: input.featured,
+      seo_title: input.seoTitle?.trim() || null,
+      seo_description: input.seoDescription?.trim() || null,
+      seo_og_image: input.seoOgImage?.trim() || null
     })
     .select("*")
     .single<AppTripRow>();
@@ -419,6 +488,10 @@ export async function updateTripService(tripId: string, input: CreateTripInput) 
       total_spots: input.totalSpots,
       hero_image: input.heroImage.trim(),
       summary: input.summary.trim(),
+      short_description: input.shortDescription?.trim() || null,
+      long_description: input.longDescription?.trim() || null,
+      duration_days: input.durationDays ?? null,
+      gallery_images: toTextArray(input.galleryImages ?? []),
       includes: toTextArray(input.includes),
       excludes: toTextArray(input.excludes),
       policies: toTextArray(input.policies),
@@ -426,6 +499,9 @@ export async function updateTripService(tripId: string, input: CreateTripInput) 
       hotels: toTextArray(input.hotels),
       publish_status: input.publishStatus,
       featured: input.featured,
+      seo_title: input.seoTitle?.trim() || null,
+      seo_description: input.seoDescription?.trim() || null,
+      seo_og_image: input.seoOgImage?.trim() || null,
       updated_at: new Date().toISOString()
     })
     .eq("id", tripId)
@@ -438,6 +514,18 @@ export async function updateTripService(tripId: string, input: CreateTripInput) 
 
   const hydrated = await hydrateTrips([data]);
   return hydrated[0];
+}
+
+export async function deleteTripService(tripId: string) {
+  ensureConfigured();
+  const supabase = getSupabaseAdminClient();
+
+  const { error } = await supabase.from("app_trips").delete().eq("id", tripId);
+  if (error) {
+    throw new Error(`No se pudo eliminar viaje: ${error.message}`);
+  }
+
+  return { ok: true };
 }
 
 export async function upsertTripPackageService(tripId: string, input: UpsertTripPackageInput) {
@@ -536,7 +624,13 @@ function mapTestimonial(row: AppTestimonialRow): Testimonial {
     tripTitle: row.trip_title,
     quote: row.quote,
     rating: row.rating,
-    verified: row.verified
+    verified: row.verified,
+    approved: row.approved,
+    city: row.city ?? undefined,
+    photoUrl: row.photo_url ?? undefined,
+    videoUrl: row.video_url ?? undefined,
+    featured: row.featured,
+    publishStatus: row.publish_status
   };
 }
 
@@ -549,7 +643,7 @@ export async function listTestimonialsService(options?: { approvedOnly?: boolean
   let query = supabase.from("app_testimonials").select("*").order("created_at", { ascending: false });
 
   if (options?.approvedOnly) {
-    query = query.eq("approved", true).eq("verified", true);
+    query = query.eq("approved", true).eq("verified", true).eq("publish_status", "published");
   }
 
   const { data, error } = await query.returns<AppTestimonialRow[]>();
@@ -571,7 +665,12 @@ export async function createTestimonialService(input: CreateTestimonialInput) {
       quote: input.quote.trim(),
       rating: input.rating,
       verified: input.verified,
-      approved: input.approved
+      approved: input.approved,
+      city: input.city?.trim() || null,
+      photo_url: input.photoUrl?.trim() || null,
+      video_url: input.videoUrl?.trim() || null,
+      featured: input.featured ?? false,
+      publish_status: input.publishStatus ?? "published"
     })
     .select("*")
     .single<AppTestimonialRow>();
@@ -585,16 +684,31 @@ export async function createTestimonialService(input: CreateTestimonialInput) {
 
 export async function updateTestimonialService(
   id: string,
-  input: Partial<Pick<CreateTestimonialInput, "verified" | "approved">>
+  input: Partial<
+    Pick<
+      CreateTestimonialInput,
+      "verified" | "approved" | "quote" | "rating" | "customerName" | "tripTitle" | "city" | "photoUrl" | "videoUrl" | "featured" | "publishStatus"
+    >
+  >
 ) {
   ensureConfigured();
   const supabase = getSupabaseAdminClient();
+  const payload: Record<string, unknown> = {};
+  if (typeof input.verified === "boolean") payload.verified = input.verified;
+  if (typeof input.approved === "boolean") payload.approved = input.approved;
+  if (typeof input.quote === "string") payload.quote = input.quote.trim();
+  if (typeof input.rating === "number") payload.rating = input.rating;
+  if (typeof input.customerName === "string") payload.customer_name = input.customerName.trim();
+  if (typeof input.tripTitle === "string") payload.trip_title = input.tripTitle.trim();
+  if (typeof input.city === "string") payload.city = input.city.trim() || null;
+  if (typeof input.photoUrl === "string") payload.photo_url = input.photoUrl.trim() || null;
+  if (typeof input.videoUrl === "string") payload.video_url = input.videoUrl.trim() || null;
+  if (typeof input.featured === "boolean") payload.featured = input.featured;
+  if (typeof input.publishStatus === "string") payload.publish_status = input.publishStatus;
+
   const { data, error } = await supabase
     .from("app_testimonials")
-    .update({
-      verified: input.verified,
-      approved: input.approved
-    })
+    .update(payload)
     .eq("id", id)
     .select("*")
     .single<AppTestimonialRow>();
@@ -604,6 +718,18 @@ export async function updateTestimonialService(
   }
 
   return mapTestimonial(data);
+}
+
+export async function deleteTestimonialService(id: string) {
+  ensureConfigured();
+  const supabase = getSupabaseAdminClient();
+
+  const { error } = await supabase.from("app_testimonials").delete().eq("id", id);
+  if (error) {
+    throw new Error(`No se pudo eliminar testimonio: ${error.message}`);
+  }
+
+  return { ok: true };
 }
 
 function mapAlbum(row: AppGalleryAlbumRow): GalleryAlbum {
@@ -622,7 +748,8 @@ function mapMedia(row: AppGalleryMediaRow): GalleryMedia {
     albumId: row.album_id,
     type: row.media_type,
     url: row.url,
-    caption: row.caption
+    caption: row.caption,
+    sortOrder: row.sort_order
   };
 }
 
@@ -677,6 +804,30 @@ export async function createGalleryAlbumService(input: CreateGalleryAlbumInput) 
   return mapAlbum(data);
 }
 
+export async function updateGalleryAlbumService(albumId: string, input: UpdateGalleryAlbumInput) {
+  ensureConfigured();
+  const supabase = getSupabaseAdminClient();
+  const payload: Record<string, unknown> = {};
+
+  if (typeof input.tripSlug === "string") payload.trip_slug = input.tripSlug.trim();
+  if (typeof input.title === "string") payload.title = input.title.trim();
+  if (typeof input.coverImage === "string") payload.cover_image = input.coverImage.trim();
+  if (typeof input.featured === "boolean") payload.featured = input.featured;
+
+  const { data, error } = await supabase
+    .from("app_gallery_albums")
+    .update(payload)
+    .eq("id", albumId)
+    .select("*")
+    .single<AppGalleryAlbumRow>();
+
+  if (error || !data) {
+    throw new Error(`No se pudo actualizar álbum: ${error?.message ?? "sin datos"}`);
+  }
+
+  return mapAlbum(data);
+}
+
 export async function createGalleryMediaService(input: CreateGalleryMediaInput) {
   ensureConfigured();
   const supabase = getSupabaseAdminClient();
@@ -699,11 +850,64 @@ export async function createGalleryMediaService(input: CreateGalleryMediaInput) 
   return mapMedia(data);
 }
 
+export async function updateGalleryMediaService(mediaId: string, input: UpdateGalleryMediaInput) {
+  ensureConfigured();
+  const supabase = getSupabaseAdminClient();
+  const payload: Record<string, unknown> = {};
+
+  if (typeof input.albumId === "string") payload.album_id = input.albumId;
+  if (typeof input.type === "string") payload.media_type = input.type;
+  if (typeof input.url === "string") payload.url = input.url.trim();
+  if (typeof input.caption === "string") payload.caption = input.caption.trim();
+  if (typeof input.sortOrder === "number") payload.sort_order = input.sortOrder;
+
+  const { data, error } = await supabase
+    .from("app_gallery_media")
+    .update(payload)
+    .eq("id", mediaId)
+    .select("*")
+    .single<AppGalleryMediaRow>();
+
+  if (error || !data) {
+    throw new Error(`No se pudo actualizar media: ${error?.message ?? "sin datos"}`);
+  }
+
+  return mapMedia(data);
+}
+
+export async function deleteGalleryAlbumService(albumId: string) {
+  ensureConfigured();
+  const supabase = getSupabaseAdminClient();
+  const { error } = await supabase.from("app_gallery_albums").delete().eq("id", albumId);
+
+  if (error) {
+    throw new Error(`No se pudo eliminar álbum: ${error.message}`);
+  }
+
+  return { ok: true };
+}
+
+export async function deleteGalleryMediaService(mediaId: string) {
+  ensureConfigured();
+  const supabase = getSupabaseAdminClient();
+  const { error } = await supabase.from("app_gallery_media").delete().eq("id", mediaId);
+
+  if (error) {
+    throw new Error(`No se pudo eliminar media: ${error.message}`);
+  }
+
+  return { ok: true };
+}
+
 function mapOffer(row: AppOfferRow): Offer {
   return {
     id: row.id,
     title: row.title,
+    subtitle: row.subtitle ?? undefined,
     description: row.description,
+    imageUrl: row.image_url ?? undefined,
+    ctaLabel: row.cta_label ?? undefined,
+    ctaHref: row.cta_href ?? undefined,
     code: row.code,
     discountType: row.discount_type,
     value: Number(row.value),
@@ -711,6 +915,10 @@ function mapOffer(row: AppOfferRow): Offer {
     startsAt: row.starts_at ?? undefined,
     endsAt: row.ends_at ?? undefined,
     active: row.active,
+    publishStatus: row.publish_status,
+    seoTitle: row.seo_title ?? undefined,
+    seoDescription: row.seo_description ?? undefined,
+    seoOgImage: row.seo_og_image ?? undefined,
     createdAt: row.created_at
   };
 }
@@ -754,14 +962,22 @@ export async function createOfferService(input: CreateOfferInput) {
     .from("app_offers")
     .insert({
       title: input.title.trim(),
+      subtitle: input.subtitle?.trim() || null,
       description: input.description.trim(),
+      image_url: input.imageUrl?.trim() || null,
+      cta_label: input.ctaLabel?.trim() || null,
+      cta_href: input.ctaHref?.trim() || null,
       code: input.code.trim().toUpperCase(),
       discount_type: input.discountType,
       value: input.value,
       trip_slug: input.tripSlug?.trim() || null,
       starts_at: input.startsAt || null,
       ends_at: input.endsAt || null,
-      active: input.active
+      active: input.active,
+      publish_status: input.publishStatus ?? "published",
+      seo_title: input.seoTitle?.trim() || null,
+      seo_description: input.seoDescription?.trim() || null,
+      seo_og_image: input.seoOgImage?.trim() || null
     })
     .select("*")
     .single<AppOfferRow>();
@@ -775,7 +991,28 @@ export async function createOfferService(input: CreateOfferInput) {
 
 export async function updateOfferService(
   id: string,
-  input: Partial<Pick<CreateOfferInput, "active" | "title" | "description" | "value" | "discountType">>
+  input: Partial<
+    Pick<
+      CreateOfferInput,
+      | "active"
+      | "title"
+      | "subtitle"
+      | "description"
+      | "imageUrl"
+      | "ctaLabel"
+      | "ctaHref"
+      | "code"
+      | "value"
+      | "discountType"
+      | "tripSlug"
+      | "startsAt"
+      | "endsAt"
+      | "publishStatus"
+      | "seoTitle"
+      | "seoDescription"
+      | "seoOgImage"
+    >
+  >
 ) {
   ensureConfigured();
   const supabase = getSupabaseAdminClient();
@@ -783,9 +1020,21 @@ export async function updateOfferService(
   const payload: Record<string, unknown> = {};
   if (typeof input.active === "boolean") payload.active = input.active;
   if (typeof input.title === "string") payload.title = input.title.trim();
+  if (typeof input.subtitle === "string") payload.subtitle = input.subtitle.trim() || null;
   if (typeof input.description === "string") payload.description = input.description.trim();
+  if (typeof input.imageUrl === "string") payload.image_url = input.imageUrl.trim() || null;
+  if (typeof input.ctaLabel === "string") payload.cta_label = input.ctaLabel.trim() || null;
+  if (typeof input.ctaHref === "string") payload.cta_href = input.ctaHref.trim() || null;
+  if (typeof input.code === "string") payload.code = input.code.trim().toUpperCase();
   if (typeof input.value === "number") payload.value = input.value;
   if (typeof input.discountType === "string") payload.discount_type = input.discountType;
+  if (typeof input.tripSlug === "string") payload.trip_slug = input.tripSlug.trim() || null;
+  if (typeof input.startsAt === "string") payload.starts_at = input.startsAt || null;
+  if (typeof input.endsAt === "string") payload.ends_at = input.endsAt || null;
+  if (typeof input.publishStatus === "string") payload.publish_status = input.publishStatus;
+  if (typeof input.seoTitle === "string") payload.seo_title = input.seoTitle.trim() || null;
+  if (typeof input.seoDescription === "string") payload.seo_description = input.seoDescription.trim() || null;
+  if (typeof input.seoOgImage === "string") payload.seo_og_image = input.seoOgImage.trim() || null;
 
   const { data, error } = await supabase
     .from("app_offers")
@@ -799,6 +1048,17 @@ export async function updateOfferService(
   }
 
   return mapOffer(data);
+}
+
+export async function deleteOfferService(id: string) {
+  ensureConfigured();
+  const supabase = getSupabaseAdminClient();
+  const { error } = await supabase.from("app_offers").delete().eq("id", id);
+  if (error) {
+    throw new Error(`No se pudo eliminar oferta: ${error.message}`);
+  }
+
+  return { ok: true };
 }
 
 function mapAutomationRule(row: AppAutomationRuleRow): AutomationRule {
