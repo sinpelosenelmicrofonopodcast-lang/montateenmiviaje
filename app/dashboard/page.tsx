@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getServerAuthContext } from "@/lib/admin-guard";
+import { isAdminRole } from "@/lib/admin-auth";
 import { formatMoney } from "@/lib/format";
 import { getPortalBundleForAuthUserService } from "@/lib/runtime-service";
 
@@ -60,7 +61,7 @@ export default async function DashboardPage() {
           <Link className="button-outline" href="/portal/documentos">
             Mis documentos
           </Link>
-          {auth.role === "admin" ? (
+          {isAdminRole(auth.role) ? (
             <Link className="button-dark" href="/dashboard/admin">
               Admin Panel
             </Link>

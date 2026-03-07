@@ -12,6 +12,7 @@ const adminLinks = [
   { href: "/admin/sorteos", label: "Sorteos" },
   { href: "/admin/testimonios", label: "Testimonios" },
   { href: "/admin/galeria", label: "Galería" },
+  { href: "/admin/travel", label: "Travel Desk" },
   { href: "/admin/crm", label: "CRM" },
   { href: "/admin/reservas", label: "Reservas" },
   { href: "/admin/pagos", label: "Pagos" },

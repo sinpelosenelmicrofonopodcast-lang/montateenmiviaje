@@ -1,10 +1,12 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { type NextRequest, NextResponse } from "next/server";
-import { isAdminRole, isAdminUser, normalizeRole } from "@/lib/admin-auth";
+import { hasTravelDeskRole, isAdminRole, isAdminUser, normalizeRole } from "@/lib/admin-auth";
 
 const ADMIN_WEB_PREFIXES = ["/dashboard/admin", "/admin"];
 const ADMIN_API_PREFIX = "/api/admin";
+const TRAVEL_WEB_PREFIX = "/admin/travel";
+const TRAVEL_API_PREFIX = "/api/admin/travel";
 const LEGACY_PUBLIC_ADMIN_PATHS = new Set(["/admin/login", "/admin/forbidden"]);
 const PORTAL_PREFIX = "/portal";
 const PUBLIC_PORTAL_PATHS = new Set(["/portal/login", "/portal/register"]);
@@ -76,8 +78,10 @@ async function getProfileRoleWithServiceKey(userId: string, email?: string | nul
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const isAdminWeb = isProtectedAdminWebPath(pathname);
-  const isAdminApi = pathname.startsWith(ADMIN_API_PREFIX);
+  const isTravelWeb = pathname === TRAVEL_WEB_PREFIX || pathname.startsWith(`${TRAVEL_WEB_PREFIX}/`);
+  const isTravelApi = pathname === TRAVEL_API_PREFIX || pathname.startsWith(`${TRAVEL_API_PREFIX}/`);
+  const isAdminWeb = isProtectedAdminWebPath(pathname) && !isTravelWeb;
+  const isAdminApi = pathname.startsWith(ADMIN_API_PREFIX) && !isTravelApi;
   const isPortalPath = pathname === PORTAL_PREFIX || pathname.startsWith(`${PORTAL_PREFIX}/`);
 
   if (LEGACY_PUBLIC_ADMIN_PATHS.has(pathname)) {
@@ -88,7 +92,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (!isAdminWeb && !isAdminApi && !isPortalPath) {
+  if (!isAdminWeb && !isAdminApi && !isTravelWeb && !isTravelApi && !isPortalPath) {
     return NextResponse.next();
   }
 
@@ -96,7 +100,7 @@ export async function middleware(request: NextRequest) {
     if (isPortalPath) {
       return toHomeRedirect(request);
     }
-    return isAdminApi
+    return isAdminApi || isTravelApi
       ? toApiForbidden("Supabase auth no configurado")
       : toHomeRedirect(request);
   }
@@ -136,7 +140,7 @@ export async function middleware(request: NextRequest) {
       loginUrl.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`);
       return NextResponse.redirect(loginUrl);
     }
-    return isAdminApi ? toApiForbidden("No autorizado") : toHomeRedirect(request);
+    return isAdminApi || isTravelApi ? toApiForbidden("No autorizado") : toHomeRedirect(request);
   }
 
   if (isPortalPath) {
@@ -166,6 +170,14 @@ export async function middleware(request: NextRequest) {
   }
 
   const hasAdminAccess = isAdminRole(roleFromSession) || isAdminUser(user);
+  const hasTravelAccess = hasAdminAccess || hasTravelDeskRole(roleFromSession);
+
+  if (isTravelWeb || isTravelApi) {
+    if (!hasTravelAccess) {
+      return isTravelApi ? toApiForbidden("Permisos insuficientes") : toHomeRedirect(request);
+    }
+    return response;
+  }
 
   if (!hasAdminAccess) {
     return isAdminApi ? toApiForbidden("Permisos insuficientes") : toHomeRedirect(request);

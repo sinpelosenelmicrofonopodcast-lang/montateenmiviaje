@@ -18,6 +18,7 @@ const modules = [
   { title: "Ofertas", href: "/admin/ofertas", helper: "Códigos y promociones activas" },
   { title: "Solicitudes", href: "/admin/solicitudes", helper: "Paquetes a medida por cliente" },
   { title: "Sorteos", href: "/admin/sorteos", helper: "Gratis o pago por entrada" },
+  { title: "Travel Desk", href: "/admin/travel", helper: "Búsqueda interna, cotizaciones y paquetes" },
   { title: "Reservas", href: "/admin/reservas", helper: "Pipeline comercial completo" },
   { title: "Pagos", href: "/admin/pagos", helper: "Depósitos y balances PayPal" },
   { title: "CRM", href: "/admin/crm", helper: "Clientes, notas y preferencias" },

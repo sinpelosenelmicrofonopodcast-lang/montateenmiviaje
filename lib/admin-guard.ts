@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
-import { isAdminRole, isAdminUser, normalizeRole, type AppRole } from "@/lib/admin-auth";
+import { hasTravelDeskRole, isAdminRole, isAdminUser, normalizeRole, type AppRole } from "@/lib/admin-auth";
 import { getSupabaseAdminClient, hasSupabaseConfig } from "@/lib/supabase-admin";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -97,6 +97,16 @@ export async function requireAdminServerAccess() {
   const context = await getServerAuthContext();
 
   if (!context.user || !isAdminRole(context.role)) {
+    redirect("/");
+  }
+
+  return context;
+}
+
+export async function requireTravelDeskServerAccess() {
+  const context = await getServerAuthContext();
+
+  if (!context.user || !(isAdminRole(context.role) || hasTravelDeskRole(context.role))) {
     redirect("/");
   }
 

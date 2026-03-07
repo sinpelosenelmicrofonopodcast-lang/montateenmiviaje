@@ -1,10 +1,11 @@
 import type { User } from "@supabase/supabase-js";
 
-export type AppRole = "admin" | "manager" | "user";
+export type AppRole = "super_admin" | "admin" | "manager" | "moderator" | "travel_agent" | "user";
 
-const ADMIN_ROLE = "admin";
 const FALLBACK_ROLE: AppRole = "user";
-const VALID_ROLES = new Set<AppRole>(["admin", "manager", "user"]);
+const VALID_ROLES = new Set<AppRole>(["super_admin", "admin", "manager", "moderator", "travel_agent", "user"]);
+const ADMIN_ROLES = new Set<AppRole>(["super_admin", "admin"]);
+const TRAVEL_DESK_ROLES = new Set<AppRole>(["super_admin", "admin", "moderator", "travel_agent", "manager"]);
 
 export function normalizeRole(role: string | null | undefined): AppRole {
   if (!role) {
@@ -16,7 +17,11 @@ export function normalizeRole(role: string | null | undefined): AppRole {
 }
 
 export function isAdminRole(role: string | null | undefined) {
-  return normalizeRole(role) === ADMIN_ROLE;
+  return ADMIN_ROLES.has(normalizeRole(role));
+}
+
+export function hasTravelDeskRole(role: string | null | undefined) {
+  return TRAVEL_DESK_ROLES.has(normalizeRole(role));
 }
 
 export function isAdminUser(user: User | null) {
