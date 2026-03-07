@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Trip } from "@/lib/types";
 import { formatDateRange, formatMoney } from "@/lib/format";
+import { toPublicImageSrc } from "@/lib/image-url";
 
 interface AdminTripsManagerProps {
   initialTrips: Trip[];
@@ -325,7 +326,7 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
         {form.heroImage ? (
           <div className="request-full">
             <p className="muted">Preview imagen</p>
-            <img src={form.heroImage} alt="Preview viaje" className="trip-card-image" />
+            <img src={toPublicImageSrc(form.heroImage)} alt="Preview viaje" className="trip-card-image" />
           </div>
         ) : null}
         <label className="request-full">

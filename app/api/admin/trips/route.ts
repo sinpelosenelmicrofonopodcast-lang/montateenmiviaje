@@ -11,7 +11,7 @@ const tripSchema = z.object({
   endDate: z.string().min(8),
   availableSpots: z.number().int().min(0),
   totalSpots: z.number().int().min(1),
-  heroImage: z.string().url(),
+  heroImage: z.string().min(1),
   summary: z.string().min(10),
   shortDescription: z.string().optional(),
   longDescription: z.string().optional(),

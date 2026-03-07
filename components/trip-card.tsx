@@ -1,13 +1,14 @@
-import Image from "next/image";
 import Link from "next/link";
 import { Trip } from "@/lib/types";
 import { availabilityPercent, formatDateRange, formatMoney } from "@/lib/format";
+import { toPublicImageSrc } from "@/lib/image-url";
 
 interface TripCardProps {
   trip: Trip;
 }
 
 export function TripCard({ trip }: TripCardProps) {
+  const safeImageSrc = toPublicImageSrc(trip.heroImage);
   const lowestPrice = trip.packages.length > 0
     ? Math.min(...trip.packages.map((pkg) => pkg.pricePerPerson))
     : null;
@@ -15,12 +16,12 @@ export function TripCard({ trip }: TripCardProps) {
 
   return (
     <article className="trip-card">
-      <Image
-        src={trip.heroImage}
+      <img
+        src={safeImageSrc}
         alt={trip.title}
         className="trip-card-image"
-        width={900}
-        height={600}
+        loading="lazy"
+        decoding="async"
       />
       <div className="trip-card-content">
         <p className="chip">{trip.category}</p>

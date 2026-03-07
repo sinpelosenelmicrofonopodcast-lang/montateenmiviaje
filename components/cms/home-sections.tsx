@@ -3,6 +3,7 @@ import { Offer, Testimonial, Trip } from "@/lib/types";
 import { PageSection } from "@/lib/cms-service";
 import { TripCard } from "@/components/trip-card";
 import { formatMoney } from "@/lib/format";
+import { toPublicImageSrc } from "@/lib/image-url";
 
 interface HomeSectionsProps {
   sections: PageSection[];
@@ -118,7 +119,7 @@ function renderOffers(section: PageSection, offers: Offer[]) {
           <article key={offer.id} className="card">
             <p className="chip">{offer.discountType === "percent" ? "Descuento %" : "Descuento fijo"}</p>
             <h3>{offer.title}</h3>
-            {offer.imageUrl ? <img src={offer.imageUrl} alt={offer.title} className="trip-card-image" /> : null}
+            {offer.imageUrl ? <img src={toPublicImageSrc(offer.imageUrl)} alt={offer.title} className="trip-card-image" /> : null}
             <p>{offer.description}</p>
             <p>
               Código: <strong>{offer.code}</strong>
@@ -225,9 +226,10 @@ function renderHero(section: PageSection) {
   const secondaryCtaLabel = asString(content.secondaryCtaLabel);
   const secondaryCtaHref = asString(content.secondaryCtaHref);
   const backgroundImage = section.imageUrl || asString(content.backgroundImage);
+  const backgroundImageUrl = backgroundImage ? toPublicImageSrc(backgroundImage) : "";
   const shellStyle = backgroundImage
     ? {
-        backgroundImage: `linear-gradient(rgba(0,0,0,0.64), rgba(0,0,0,0.76)), url(${backgroundImage})`,
+        backgroundImage: `linear-gradient(rgba(0,0,0,0.64), rgba(0,0,0,0.76)), url("${backgroundImageUrl}")`,
         backgroundSize: "cover",
         backgroundPosition: "center"
       }

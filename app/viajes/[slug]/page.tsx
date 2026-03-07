@@ -1,8 +1,8 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTripBySlugService } from "@/lib/catalog-service";
 import { availabilityPercent, formatDateRange, formatMoney } from "@/lib/format";
+import { toPublicImageSrc } from "@/lib/image-url";
 
 interface TripDetailPageProps {
   params: Promise<{ slug: string }>;
@@ -19,6 +19,7 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
   }
 
   const availability = availabilityPercent(trip.availableSpots, trip.totalSpots);
+  const safeImageSrc = toPublicImageSrc(trip.heroImage);
   const minPrice = trip.packages.length > 0
     ? Math.min(...trip.packages.map((pkg) => pkg.pricePerPerson))
     : null;
@@ -30,12 +31,12 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
     <main className="container section">
       <div className="trip-detail-shell">
         <section>
-          <Image
+          <img
             className="trip-detail-image"
-            src={trip.heroImage}
+            src={safeImageSrc}
             alt={trip.title}
-            width={1200}
-            height={800}
+            loading="eager"
+            decoding="async"
           />
           <h1>{trip.title}</h1>
           <p className="chip">{trip.category}</p>

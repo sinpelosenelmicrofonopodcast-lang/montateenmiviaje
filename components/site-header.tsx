@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getServerAuthContext } from "@/lib/admin-guard";
 import { getSiteSettingService } from "@/lib/cms-service";
+import { toPublicImageSrc } from "@/lib/image-url";
 
 const links = [
   { href: "/", label: "Home" },
@@ -27,7 +28,7 @@ export async function SiteHeader() {
   ]);
   const identity = identitySetting?.value ?? {};
   const siteName = readString(identity.siteName, "Móntate en mi viaje");
-  const logoUrl = readString(identity.logoUrl, "/logo-header.png");
+  const logoUrl = toPublicImageSrc(readString(identity.logoUrl, "/logo-header.png"), "/logo-header.png");
   const isLoggedIn = Boolean(auth.user);
   const navItems = [
     ...links,
