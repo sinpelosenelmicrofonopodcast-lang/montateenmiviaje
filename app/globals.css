@@ -165,13 +165,17 @@ h4 {
   gap: 8px;
 }
 
-.nav-actions-desktop a {
+.nav-actions-desktop a,
+.nav-actions-desktop button {
   border-radius: 999px;
   border: 1px solid #d7dee8;
   padding: 8px 12px;
   font-size: 13px;
   line-height: 1;
   white-space: nowrap;
+  background: #fff;
+  cursor: pointer;
+  font-family: inherit;
 }
 
 .nav-action-muted {
@@ -1171,13 +1175,16 @@ th {
     scrollbar-width: thin;
   }
 
-  .nav-links-mobile a {
+  .nav-links-mobile a,
+  .nav-links-mobile button {
     border: 1px solid #dcdcdc;
     border-radius: 999px;
     padding: 8px 11px;
     background: #fff;
     font-size: 13px;
     line-height: 1;
+    font-family: inherit;
+    cursor: pointer;
   }
 
   .admin-logout-button {

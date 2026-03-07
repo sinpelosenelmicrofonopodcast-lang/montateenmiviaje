@@ -3,6 +3,7 @@ import { isAdminRole } from "@/lib/admin-auth";
 import { getServerAuthContext } from "@/lib/admin-guard";
 import { getSiteSettingService } from "@/lib/cms-service";
 import { toPublicImageSrc } from "@/lib/image-url";
+import { HeaderLogoutButton } from "@/components/header-logout-button";
 
 const primaryLinks = [
   { href: "/viajes", label: "Viajes" },
@@ -40,7 +41,10 @@ export async function SiteHeader() {
         ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : [{ href: "/portal", label: "Portal" }]),
         { href: "/dashboard", label: "Mi panel" }
       ]
-    : [{ href: "/registro", label: "Registro" }];
+    : [
+        { href: "/registro", label: "Registro" },
+        { href: "/portal/login", label: "Login" }
+      ];
 
   const mobileLinks = [...primaryLinks, ...secondaryLinks, ...accountLinks];
 
@@ -78,6 +82,7 @@ export async function SiteHeader() {
                 {link.label}
               </Link>
             ))}
+            {isLoggedIn ? <HeaderLogoutButton className="nav-action-muted" /> : null}
           </div>
         </div>
 
@@ -88,6 +93,7 @@ export async function SiteHeader() {
               {link.label}
             </Link>
           ))}
+          {isLoggedIn ? <HeaderLogoutButton /> : null}
         </nav>
       </div>
     </header>

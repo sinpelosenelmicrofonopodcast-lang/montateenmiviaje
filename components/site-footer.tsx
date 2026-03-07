@@ -35,7 +35,8 @@ export async function SiteFooter() {
     { label: "FAQ", href: "/faq" },
     { label: "About", href: "/about" },
     { label: "Contacto", href: "/contacto" },
-    { label: "Registro", href: "/registro" }
+    { label: "Registro", href: "/registro" },
+    { label: "Login", href: "/portal/login" }
   ];
 
   return (
