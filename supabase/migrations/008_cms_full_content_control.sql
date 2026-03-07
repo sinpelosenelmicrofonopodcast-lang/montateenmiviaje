@@ -398,6 +398,7 @@ values
   ('branding', 'site_identity', '{"siteName":"Móntate en mi viaje","tagline":"Premium group travel","logoUrl":"/logo-header.png","faviconUrl":"/favicon.png"}'::jsonb),
   ('contact', 'contact_info', '{"email":"hello@montateenmiviaje.com","phone":"+1 (555) 010-2026","whatsapp":"+1 (555) 010-2026","address":"Miami, FL","hours":"Lun-Vie 9:00-18:00"}'::jsonb),
   ('social', 'social_links', '{"instagram":"https://instagram.com","tiktok":"https://tiktok.com","youtube":"https://youtube.com"}'::jsonb),
-  ('analytics', 'tracking', '{"googleAnalyticsId":"","metaPixelId":"","customHeadScript":""}'::jsonb)
+  ('analytics', 'tracking', '{"googleAnalyticsId":"","metaPixelId":"","customHeadScript":""}'::jsonb),
+  ('payments', 'payment_links', '{"methods":[{"key":"paypal","label":"PayPal","href":"https://paypal.me/"},{"key":"cashapp","label":"Cash App","href":"https://cash.app/$"},{"key":"zelle","label":"Zelle","href":"mailto:pagos@montateenmiviaje.com"}],"note":"Configura estos links desde Admin > Configuración."}'::jsonb)
 on conflict (setting_key) do update
 set value_json = excluded.value_json, updated_at = now();

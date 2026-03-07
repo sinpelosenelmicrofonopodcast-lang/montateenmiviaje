@@ -236,6 +236,12 @@ function isMissingCmsTableError(error: { code?: string; message?: string } | nul
   return false;
 }
 
+function isTransientSupabaseReadError(error: { code?: string; message?: string } | null | undefined) {
+  if (!error) return false;
+  const message = String(error.message ?? "").toLowerCase();
+  return message.includes("fetch failed") || message.includes("network") || message.includes("econnrefused");
+}
+
 export async function listSitePagesService(options?: { publishedOnly?: boolean }) {
   if (!hasSupabaseConfig()) {
     return [] as SitePage[];
@@ -254,7 +260,7 @@ export async function listSitePagesService(options?: { publishedOnly?: boolean }
   const { data, error } = await query.returns<AppSitePageRow[]>();
 
   if (error) {
-    if (isMissingCmsTableError(error)) {
+    if (isMissingCmsTableError(error) || isTransientSupabaseReadError(error)) {
       return [] as SitePage[];
     }
     throw new Error(`No se pudieron cargar páginas CMS: ${error.message}`);
@@ -276,7 +282,7 @@ export async function getSitePageService(pageKey: string) {
     .maybeSingle<AppSitePageRow>();
 
   if (error) {
-    if (isMissingCmsTableError(error)) {
+    if (isMissingCmsTableError(error) || isTransientSupabaseReadError(error)) {
       return null;
     }
     throw new Error(`No se pudo cargar la página CMS: ${error.message}`);
@@ -301,7 +307,7 @@ export async function getCmsPageBundleService(
     .maybeSingle<AppSitePageRow>();
 
   if (pageRes.error) {
-    if (isMissingCmsTableError(pageRes.error)) {
+    if (isMissingCmsTableError(pageRes.error) || isTransientSupabaseReadError(pageRes.error)) {
       return { page: null, sections: [] };
     }
     throw new Error(`No se pudo cargar página CMS: ${pageRes.error.message}`);
@@ -329,7 +335,7 @@ export async function getCmsPageBundleService(
 
   const sectionsRes = await sectionsQuery.returns<AppPageSectionRow[]>();
   if (sectionsRes.error) {
-    if (isMissingCmsTableError(sectionsRes.error)) {
+    if (isMissingCmsTableError(sectionsRes.error) || isTransientSupabaseReadError(sectionsRes.error)) {
       return { page, sections: [] };
     }
     throw new Error(`No se pudieron cargar secciones CMS: ${sectionsRes.error.message}`);
@@ -510,7 +516,7 @@ export async function listSiteSettingsService(options?: { settingGroup?: string 
 
   const { data, error } = await query.returns<AppSiteSettingRow[]>();
   if (error) {
-    if (isMissingCmsTableError(error)) {
+    if (isMissingCmsTableError(error) || isTransientSupabaseReadError(error)) {
       return [] as SiteSetting[];
     }
     throw new Error(`No se pudieron cargar settings: ${error.message}`);
@@ -532,7 +538,7 @@ export async function getSiteSettingService(settingKey: string) {
     .maybeSingle<AppSiteSettingRow>();
 
   if (error) {
-    if (isMissingCmsTableError(error)) {
+    if (isMissingCmsTableError(error) || isTransientSupabaseReadError(error)) {
       return null;
     }
     throw new Error(`No se pudo cargar setting ${settingKey}: ${error.message}`);

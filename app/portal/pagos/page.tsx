@@ -1,4 +1,7 @@
+import { PaymentMethodLinks } from "@/components/payment-method-links";
+import { getSiteSettingService } from "@/lib/cms-service";
 import { formatMoney } from "@/lib/format";
+import { parsePaymentLinksSetting } from "@/lib/payment-links";
 import { requirePortalSession } from "@/lib/portal-auth";
 import { getPortalBundleForAuthUserService } from "@/lib/runtime-service";
 
@@ -6,7 +9,11 @@ export const dynamic = "force-dynamic";
 
 export default async function PortalPagosPage() {
   const session = await requirePortalSession();
-  const bundle = await getPortalBundleForAuthUserService(session.user.id, session.email);
+  const [bundle, paymentSetting] = await Promise.all([
+    getPortalBundleForAuthUserService(session.user.id, session.email),
+    getSiteSettingService("payment_links")
+  ]);
+  const paymentConfig = parsePaymentLinksSetting(paymentSetting);
 
   return (
     <main className="container section">
@@ -44,6 +51,9 @@ export default async function PortalPagosPage() {
           </table>
         </div>
       </section>
+      {paymentConfig.methods.length > 0 ? (
+        <PaymentMethodLinks methods={paymentConfig.methods} note={paymentConfig.note} />
+      ) : null}
     </main>
   );
 }

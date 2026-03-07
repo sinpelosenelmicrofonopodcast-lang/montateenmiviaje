@@ -2,14 +2,18 @@
 
 import { useMemo, useState } from "react";
 import { PaypalButton } from "@/components/paypal-button";
+import { PaymentMethodLinks } from "@/components/payment-method-links";
+import { PaymentMethodLink } from "@/lib/payment-links";
 import { Trip } from "@/lib/types";
 import { formatMoney } from "@/lib/format";
 
 interface BookingCheckoutProps {
   trip: Trip;
+  paymentLinks?: PaymentMethodLink[];
+  paymentNote?: string;
 }
 
-export function BookingCheckout({ trip }: BookingCheckoutProps) {
+export function BookingCheckout({ trip, paymentLinks = [], paymentNote }: BookingCheckoutProps) {
   const defaultPackage = trip.packages[0];
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
@@ -152,6 +156,13 @@ export function BookingCheckout({ trip }: BookingCheckoutProps) {
           <PaypalButton bookingId={bookingId} amount={checkoutAmount} onPaid={(orderId) => setPaidOrderId(orderId)} />
         ) : null}
         {paidOrderId ? <p className="success">Pago confirmado. Orden PayPal: {paidOrderId}</p> : null}
+        {paymentLinks.length > 0 ? (
+          <PaymentMethodLinks
+            methods={paymentLinks}
+            note={paymentNote}
+            title="Otros métodos de pago (admin)"
+          />
+        ) : null}
       </section>
 
       <aside className="card">

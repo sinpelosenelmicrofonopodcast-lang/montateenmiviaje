@@ -378,6 +378,61 @@ label {
   background: #fff;
 }
 
+.payment-links-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.payment-link-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #ececec;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.payment-link-card:hover {
+  border-color: #cfcfcf;
+}
+
+.payment-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  background: #111;
+  color: #fff;
+}
+
+.payment-icon.paypal {
+  background: #003087;
+}
+
+.payment-icon.cashapp {
+  background: #00d632;
+  color: #04210d;
+}
+
+.payment-icon.zelle {
+  background: #6d1dce;
+}
+
+.payment-icon.venmo {
+  background: #008cff;
+}
+
+.payment-icon.stripe {
+  background: #635bff;
+}
+
 .itinerary-item {
   border-top: 1px solid #eaeaea;
   padding: var(--space-3) 0;

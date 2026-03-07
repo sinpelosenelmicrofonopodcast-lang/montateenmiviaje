@@ -1,11 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { PaymentMethodLinks } from "@/components/payment-method-links";
+import { PaymentMethodLink } from "@/lib/payment-links";
 
 interface RaffleEntryFormProps {
   raffleId: string;
   isFree: boolean;
   paymentInstructions: string;
+  paymentLinks?: PaymentMethodLink[];
+  paymentNote?: string;
   initialAvailableNumbers: number[];
 }
 
@@ -13,6 +17,8 @@ export function RaffleEntryForm({
   raffleId,
   isFree,
   paymentInstructions,
+  paymentLinks = [],
+  paymentNote,
   initialAvailableNumbers
 }: RaffleEntryFormProps) {
   const [customerEmail, setCustomerEmail] = useState("");
@@ -100,6 +106,13 @@ export function RaffleEntryForm({
       {!isFree ? (
         <>
           <p className="muted"><strong>Instrucciones de pago:</strong> {paymentInstructions}</p>
+          {paymentLinks.length > 0 ? (
+            <PaymentMethodLinks
+              methods={paymentLinks}
+              note={paymentNote}
+              title="Pagar entrada"
+            />
+          ) : null}
           <label>
             Referencia de pago
             <input
