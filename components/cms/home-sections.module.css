@@ -1,0 +1,665 @@
+.homeRoot {
+  background:
+    radial-gradient(circle at 20% -8%, rgba(20, 99, 137, 0.08), transparent 35%),
+    radial-gradient(circle at 85% 2%, rgba(201, 137, 74, 0.1), transparent 36%),
+    #f9f8f4;
+  color: #17191f;
+}
+
+.previewChip {
+  margin: 24px auto 0;
+  width: fit-content;
+}
+
+.heroWrap {
+  padding: 28px 0 8px;
+}
+
+.heroStage {
+  position: relative;
+  min-height: 700px;
+  border-radius: 30px;
+  overflow: hidden;
+  box-shadow: 0 35px 80px rgba(10, 18, 24, 0.18);
+}
+
+.heroBackdrop {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+}
+
+.heroBackdrop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(15, 17, 24, 0.18) 0%, rgba(10, 13, 18, 0.44) 65%, rgba(8, 10, 16, 0.54) 100%);
+}
+
+.heroGlobe {
+  position: absolute;
+  left: 2.5%;
+  bottom: 2%;
+  width: clamp(140px, 22vw, 320px);
+  opacity: 0.3;
+  z-index: 2;
+  pointer-events: none;
+  filter: drop-shadow(0 20px 46px rgba(0, 0, 0, 0.35));
+}
+
+.heroContent {
+  position: relative;
+  z-index: 3;
+  padding: clamp(26px, 4vw, 64px);
+  color: #f9fafc;
+  max-width: 920px;
+}
+
+.heroBadge {
+  border-color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8fbff;
+}
+
+.badgeRow {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.badgePill {
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  color: #f8fbff;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 7px 11px;
+  backdrop-filter: blur(6px);
+}
+
+.heroTitle {
+  margin: 20px 0 14px;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  line-height: 0.92;
+  letter-spacing: 0.2px;
+  font-size: clamp(2.6rem, 6.1vw, 6.4rem);
+  max-width: 13ch;
+  text-wrap: balance;
+  text-shadow: 0 12px 34px rgba(0, 0, 0, 0.42);
+}
+
+.heroSubtitle {
+  margin: 0;
+  font-size: clamp(1.06rem, 2.1vw, 2rem);
+  line-height: 1.22;
+  max-width: 56ch;
+  color: rgba(248, 250, 254, 0.94);
+}
+
+.heroActions {
+  margin-top: 24px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ctaPrimary,
+.ctaSecondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 13px 26px;
+  border: 1px solid transparent;
+  font-weight: 700;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.ctaPrimary {
+  background: linear-gradient(180deg, #ff7c29, #df5e10);
+  color: #fff;
+  box-shadow: 0 14px 28px rgba(224, 96, 21, 0.42);
+}
+
+.ctaSecondary {
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(6px);
+}
+
+.ctaPrimary:hover,
+.ctaSecondary:hover {
+  transform: translateY(-2px);
+}
+
+.searchCard {
+  margin-top: 26px;
+  width: min(620px, 100%);
+  background: rgba(248, 251, 255, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 14px 28px rgba(7, 16, 32, 0.22);
+  color: #151720;
+}
+
+.searchTitle {
+  margin: 0;
+  font-weight: 700;
+}
+
+.searchActions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.searchActions a {
+  border: 1px solid #d2d9e4;
+  border-radius: 999px;
+  padding: 8px 11px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.trustStripSection {
+  padding: 18px 0 8px;
+}
+
+.trustStrip {
+  border: 1px solid #e9ebf1;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.94);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+}
+
+.trustItem {
+  border-radius: 14px;
+  border: 1px solid #eef1f6;
+  background: linear-gradient(180deg, #ffffff, #f8fafd);
+  padding: 13px 14px;
+}
+
+.trustValue {
+  margin: 0;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.trustLabel {
+  margin: 6px 0 0;
+  font-weight: 700;
+}
+
+.trustHint {
+  margin: 4px 0 0;
+  color: #6a7080;
+  font-size: 13px;
+}
+
+.sectionBlock,
+.sectionBlockAlt,
+.sectionBlockThin,
+.finalCtaSection {
+  padding: clamp(56px, 8vw, 110px) 0;
+}
+
+.sectionBlockAlt {
+  background: linear-gradient(180deg, rgba(245, 247, 250, 0.9), rgba(248, 245, 240, 0.9));
+}
+
+.sectionBlockThin {
+  padding-top: 28px;
+  padding-bottom: 54px;
+}
+
+.sectionHeader {
+  max-width: 760px;
+  margin-bottom: 24px;
+}
+
+.sectionHeader h2 {
+  margin: 14px 0 8px;
+  font-size: clamp(2rem, 4vw, 4rem);
+  line-height: 0.96;
+}
+
+.sectionHeader p {
+  margin: 0;
+  color: #656d79;
+  font-size: clamp(1rem, 1.7vw, 1.2rem);
+}
+
+.destinationGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.destinationCard {
+  position: relative;
+  min-height: 320px;
+  border-radius: 22px;
+  overflow: hidden;
+  isolation: isolate;
+  display: block;
+  box-shadow: 0 18px 40px rgba(11, 17, 24, 0.12);
+}
+
+.destinationCard img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.45s ease;
+}
+
+.destinationCard:hover img {
+  transform: scale(1.06);
+}
+
+.destinationOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 18px;
+  background: linear-gradient(180deg, rgba(6, 9, 14, 0.02) 34%, rgba(8, 11, 18, 0.74) 90%);
+  color: #fff;
+}
+
+.destinationCategory {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.destinationOverlay h3 {
+  margin: 8px 0 6px;
+  font-size: clamp(1.45rem, 2.2vw, 2.3rem);
+}
+
+.destinationOverlay p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.experienceLayout {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr;
+  gap: 14px;
+}
+
+.experienceMain {
+  grid-row: span 2;
+}
+
+.experienceMainCard,
+.experienceCard {
+  height: 100%;
+  background: #fff;
+  border: 1px solid #e8edf2;
+  border-radius: 20px;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: 220px 1fr;
+  box-shadow: 0 16px 34px rgba(13, 18, 28, 0.08);
+}
+
+.experienceCard {
+  grid-template-rows: 170px 1fr;
+}
+
+.experienceMainCard img,
+.experienceCard img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.experienceMainCard div,
+.experienceCard div {
+  padding: 14px;
+}
+
+.experienceMainCard h3,
+.experienceCard h3 {
+  margin: 9px 0 6px;
+  font-size: 1.45rem;
+}
+
+.experienceMainCard p,
+.experienceCard p {
+  margin: 0;
+  color: #616a76;
+}
+
+.experienceMainCard a,
+.experienceCard a {
+  margin-top: 10px;
+  display: inline-flex;
+  color: #0b5f86;
+  font-weight: 700;
+}
+
+.raffleFeature {
+  border: 1px solid #dce6ee;
+  border-radius: 24px;
+  background: linear-gradient(130deg, #fefefe, #eff6fb);
+  padding: clamp(18px, 3vw, 34px);
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 18px;
+  box-shadow: 0 20px 36px rgba(12, 21, 36, 0.08);
+}
+
+.raffleFeature h2 {
+  margin: 10px 0;
+  font-size: clamp(2rem, 3.4vw, 3.6rem);
+  line-height: 0.95;
+}
+
+.raffleFeature p {
+  margin: 0;
+  color: #5f6874;
+}
+
+.raffleMeta {
+  margin-top: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.raffleMeta span {
+  border: 1px solid #dae4ed;
+  background: #fff;
+  border-radius: 999px;
+  font-size: 13px;
+  padding: 7px 11px;
+  color: #2e3542;
+}
+
+.rafflePulseCard {
+  border-radius: 18px;
+  background: linear-gradient(180deg, #16384e, #0f2534);
+  color: #eef8ff;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.rafflePulseValue {
+  margin: 0;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: clamp(3rem, 6vw, 5rem);
+  line-height: 0.9;
+}
+
+.rafflePulseTag {
+  margin-top: 10px;
+  border: 1px solid rgba(238, 248, 255, 0.32);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.benefitsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.benefitCard {
+  border: 1px solid #e8edf2;
+  border-radius: 18px;
+  background: #fff;
+  padding: 18px;
+}
+
+.benefitIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #0a678d, #2d8aaf);
+  box-shadow: 0 12px 20px rgba(11, 87, 118, 0.24);
+}
+
+.benefitCard h3 {
+  margin: 12px 0 7px;
+  font-size: 1.4rem;
+}
+
+.benefitCard p {
+  margin: 0;
+  color: #66707c;
+}
+
+.testimonialGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.testimonialCard {
+  border: 1px solid #e4e9ef;
+  background: #fff;
+  border-radius: 20px;
+  padding: 18px;
+}
+
+.testimonialHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.testimonialAvatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, #0a678d, #2d8aaf);
+  color: #fff;
+  font-weight: 700;
+}
+
+.testimonialHead h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.testimonialHead p {
+  margin: 2px 0 0;
+  color: #69717d;
+  font-size: 14px;
+}
+
+.testimonialQuote {
+  margin: 14px 0 10px;
+  color: #303641;
+}
+
+.testimonialStars {
+  margin: 0;
+  color: #c38c2f;
+  letter-spacing: 0.11em;
+}
+
+.galleryGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.galleryItem {
+  margin: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid #e4ebf2;
+  background: #fff;
+  box-shadow: 0 12px 24px rgba(11, 19, 28, 0.08);
+}
+
+.galleryItem img {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+}
+
+.galleryItem figcaption {
+  padding: 10px;
+  color: #5f6874;
+  font-size: 14px;
+}
+
+.finalCtaCard {
+  border-radius: 24px;
+  padding: clamp(24px, 5vw, 58px);
+  background:
+    linear-gradient(120deg, rgba(12, 31, 44, 0.9), rgba(18, 79, 106, 0.75), rgba(194, 118, 71, 0.38)),
+    url("https://images.unsplash.com/photo-1519046904884-53103b34b206?auto=format&fit=crop&w=1900&q=80");
+  background-size: cover;
+  background-position: center;
+  color: #f6f9fc;
+  box-shadow: 0 24px 48px rgba(9, 16, 27, 0.24);
+}
+
+.finalCtaCard h2 {
+  margin: 12px 0;
+  font-size: clamp(2rem, 4.2vw, 4.4rem);
+  line-height: 0.95;
+  max-width: 13ch;
+}
+
+.finalCtaCard p {
+  margin: 0;
+  max-width: 60ch;
+  color: rgba(246, 249, 252, 0.92);
+}
+
+.sectionHeaderCompact {
+  text-align: center;
+}
+
+.sectionHeaderCompact h3 {
+  margin: 12px 0 8px;
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+}
+
+.sectionHeaderCompact p {
+  margin: 0;
+  color: #6a7280;
+}
+
+@media (max-width: 1080px) {
+  .trustStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .experienceLayout {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .experienceMain {
+    grid-column: span 2;
+  }
+
+  .benefitsGrid,
+  .testimonialGrid,
+  .galleryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .raffleFeature {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .heroWrap {
+    padding-top: 12px;
+  }
+
+  .heroStage {
+    min-height: 0;
+    border-radius: 20px;
+  }
+
+  .heroContent {
+    padding: 18px;
+  }
+
+  .heroTitle {
+    font-size: clamp(2.1rem, 11vw, 3.4rem);
+    line-height: 0.94;
+  }
+
+  .heroSubtitle {
+    font-size: 1.03rem;
+  }
+
+  .heroGlobe {
+    width: 140px;
+    opacity: 0.22;
+  }
+
+  .heroActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ctaPrimary,
+  .ctaSecondary {
+    width: 100%;
+  }
+
+  .searchCard {
+    padding: 12px;
+  }
+
+  .searchActions {
+    gap: 6px;
+  }
+
+  .searchActions a {
+    width: 100%;
+    text-align: center;
+  }
+
+  .trustStrip,
+  .destinationGrid,
+  .experienceLayout,
+  .benefitsGrid,
+  .testimonialGrid,
+  .galleryGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .sectionHeader h2 {
+    font-size: clamp(1.8rem, 8vw, 2.8rem);
+  }
+
+  .destinationCard {
+    min-height: 280px;
+  }
+
+  .galleryItem img {
+    height: 220px;
+  }
+}

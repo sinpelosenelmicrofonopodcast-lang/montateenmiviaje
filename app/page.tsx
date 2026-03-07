@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { HomeSectionsRenderer } from "@/components/cms/home-sections";
 import { getCmsPageBundleService } from "@/lib/cms-service";
-import { listOffersService, listTestimonialsService, listTripsService } from "@/lib/catalog-service";
+import { listGalleryBundlesService, listOffersService, listTestimonialsService, listTripsService } from "@/lib/catalog-service";
+import { listRafflesService } from "@/lib/raffles-service";
 
 export const dynamic = "force-dynamic";
 
@@ -24,11 +25,13 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const [bundle, trips, testimonials, offers] = await Promise.all([
+  const [bundle, trips, testimonials, offers, raffles, galleryBundles] = await Promise.all([
     getCmsPageBundleService("home"),
     listTripsService({ publishedOnly: true, featuredOnly: true }),
     listTestimonialsService({ approvedOnly: true }),
-    listOffersService({ activeOnly: true })
+    listOffersService({ activeOnly: true }),
+    listRafflesService({ includeClosed: true }),
+    listGalleryBundlesService()
   ]);
 
   return (
@@ -38,6 +41,8 @@ export default async function HomePage() {
         trips={trips}
         offers={offers}
         testimonials={testimonials}
+        raffles={raffles}
+        galleryBundles={galleryBundles}
       />
     </main>
   );
