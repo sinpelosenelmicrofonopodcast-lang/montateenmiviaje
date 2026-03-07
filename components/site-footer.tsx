@@ -1,5 +1,6 @@
 import { getSiteSettingService } from "@/lib/cms-service";
 import Link from "next/link";
+import { toPublicImageSrc } from "@/lib/image-url";
 
 function readString(value: unknown, fallback: string) {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
@@ -31,6 +32,7 @@ export async function SiteFooter() {
   const contact = contactSetting?.value ?? {};
 
   const siteName = readString(identity.siteName, "Móntate en mi viaje");
+  const logoUrl = toPublicImageSrc(readString(identity.logoUrl, "/logo-header.png"), "/logo-header.png");
   const tagline = readString(contact.tagline ?? identity.tagline, "Viajes grupales premium y experiencias internacionales.");
   const email = readString(contact.email, "hello@montateenmiviaje.com");
   const phone = readString(contact.phone, "+1 (555) 010-2026");
@@ -54,8 +56,13 @@ export async function SiteFooter() {
       <div className="container">
         <div className="footer-top">
           <div>
-            <p className="footer-brand">{siteName}</p>
-            <p className="footer-tagline">{tagline}</p>
+            <div className="footer-brand-row">
+              <img src={logoUrl} alt={siteName} width={68} height={68} className="footer-brand-logo" />
+              <div>
+                <p className="footer-brand">{siteName}</p>
+                <p className="footer-tagline">{tagline}</p>
+              </div>
+            </div>
             <div className="footer-socials">
               {socials.map((social) => (
                 <a key={social.label} href={social.url} target="_blank" rel="noreferrer">
