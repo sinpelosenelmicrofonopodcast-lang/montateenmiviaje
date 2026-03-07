@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { HomeSectionsRenderer } from "@/components/cms/home-sections";
 import { getCmsPageBundleService } from "@/lib/cms-service";
 import { listGalleryBundlesService, listOffersService, listTestimonialsService, listTripsService } from "@/lib/catalog-service";
-import { listRafflesService } from "@/lib/raffles-service";
+import { getRafflePublicSummaryService, listRafflesService } from "@/lib/raffles-service";
 
 export const dynamic = "force-dynamic";
 
@@ -27,12 +27,16 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function HomePage() {
   const [bundle, trips, testimonials, offers, raffles, galleryBundles] = await Promise.all([
     getCmsPageBundleService("home"),
-    listTripsService({ publishedOnly: true, featuredOnly: true }),
+    listTripsService({ publishedOnly: true }),
     listTestimonialsService({ approvedOnly: true }),
     listOffersService({ activeOnly: true }),
     listRafflesService({ includeClosed: true }),
     listGalleryBundlesService()
   ]);
+  const featuredRaffle = raffles.find((raffle) => raffle.status === "published") ?? raffles[0] ?? null;
+  const featuredRaffleSummary = featuredRaffle
+    ? await getRafflePublicSummaryService(featuredRaffle.id).catch(() => null)
+    : null;
 
   return (
     <main>
@@ -43,6 +47,7 @@ export default async function HomePage() {
         testimonials={testimonials}
         raffles={raffles}
         galleryBundles={galleryBundles}
+        featuredRaffleSummary={featuredRaffleSummary}
       />
     </main>
   );

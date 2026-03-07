@@ -4,17 +4,18 @@ import { getServerAuthContext } from "@/lib/admin-guard";
 import { getSiteSettingService } from "@/lib/cms-service";
 import { toPublicImageSrc } from "@/lib/image-url";
 
-const links = [
-  { href: "/", label: "Home" },
+const primaryLinks = [
   { href: "/viajes", label: "Viajes" },
   { href: "/ofertas", label: "Ofertas" },
   { href: "/sorteos", label: "Sorteos" },
-  { href: "/registro", label: "Registro" },
   { href: "/solicitar-viaje", label: "Solicitar viaje" },
   { href: "/testimonios", label: "Testimonios" },
-  { href: "/galeria", label: "Galería" },
+  { href: "/galeria", label: "Galeria" },
+  { href: "/contacto", label: "Contacto" }
+];
+
+const secondaryLinks = [
   { href: "/about", label: "About" },
-  { href: "/contacto", label: "Contacto" },
   { href: "/faq", label: "FAQ" }
 ];
 
@@ -27,38 +28,62 @@ export async function SiteHeader() {
     getServerAuthContext(),
     getSiteSettingService("site_identity")
   ]);
+
   const identity = identitySetting?.value ?? {};
   const siteName = readString(identity.siteName, "Móntate en mi viaje");
   const logoUrl = toPublicImageSrc(readString(identity.logoUrl, "/logo-header.png"), "/logo-header.png");
   const isLoggedIn = Boolean(auth.user);
   const isAdmin = isAdminRole(auth.role);
-  const navItems = [
-    ...links,
-    ...(isLoggedIn && !isAdmin ? [{ href: "/portal", label: "Portal" }] : []),
-    ...(isLoggedIn && isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
-    ...(isLoggedIn ? [{ href: "/dashboard", label: "Mi panel" }] : [])
-  ];
+
+  const accountLinks = isLoggedIn
+    ? [
+        ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : [{ href: "/portal", label: "Portal" }]),
+        { href: "/dashboard", label: "Mi panel" }
+      ]
+    : [{ href: "/registro", label: "Registro" }];
+
+  const mobileLinks = [...primaryLinks, ...secondaryLinks, ...accountLinks];
 
   return (
     <header className="site-header">
       <div className="container nav-shell">
         <div className="brand-row">
-          <Link href="/" className="brand">
+          <Link href="/" className="brand" aria-label="Ir al inicio">
             <img src={logoUrl} alt={siteName} width={64} height={64} className="brand-logo" />
             <span className="brand-name">{siteName}</span>
           </Link>
         </div>
 
-        <nav className="nav-links nav-links-desktop" aria-label="main navigation">
-          {navItems.map((link) => (
-            <Link key={link.href} href={link.href}>
-              {link.label}
-            </Link>
-          ))}
-        </nav>
+        <div className="nav-main">
+          <nav className="nav-links nav-links-desktop" aria-label="main navigation">
+            {primaryLinks.map((link) => (
+              <Link key={link.href} href={link.href}>
+                {link.label}
+              </Link>
+            ))}
+            {secondaryLinks.map((link) => (
+              <Link key={link.href} href={link.href} className="nav-link-secondary">
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+
+          <div className="nav-actions nav-actions-desktop">
+            {accountLinks.map((link, index) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={index === accountLinks.length - 1 ? "nav-action-primary" : "nav-action-muted"}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        </div>
 
         <nav className="nav-links nav-links-mobile" aria-label="mobile navigation">
-          {navItems.map((link) => (
+          <Link href="/">Home</Link>
+          {mobileLinks.map((link) => (
             <Link key={link.href} href={link.href}>
               {link.label}
             </Link>

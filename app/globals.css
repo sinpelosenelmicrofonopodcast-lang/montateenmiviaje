@@ -53,19 +53,19 @@ h4 {
 .site-header {
   position: sticky;
   top: 0;
-  z-index: 10;
-  backdrop-filter: blur(8px);
-  background: rgba(255, 255, 255, 0.92);
-  border-bottom: 1px solid #ececec;
+  z-index: 20;
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.94);
+  border-bottom: 1px solid #e8edf2;
 }
 
 .nav-shell {
-  min-height: 92px;
+  min-height: 102px;
   display: grid;
   grid-template-columns: 1fr;
-  align-items: start;
+  align-items: center;
   gap: 10px;
-  padding: 10px 0 12px;
+  padding: 10px 0 14px;
 }
 
 .brand-row {
@@ -84,7 +84,7 @@ h4 {
 
 .brand img {
   width: auto;
-  height: 54px;
+  height: 58px;
 }
 
 .brand-name {
@@ -95,25 +95,68 @@ h4 {
   white-space: normal;
 }
 
+.nav-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
 .nav-links {
   display: flex;
-  gap: 10px;
+  gap: 6px;
   font-size: 14px;
   margin-left: 0;
 }
 
 .nav-links-desktop {
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .nav-links-desktop a {
   white-space: nowrap;
-  border: 1px solid #dcdcdc;
   border-radius: 999px;
-  padding: 7px 11px;
-  background: #fff;
+  padding: 7px 10px;
   font-size: 13px;
   line-height: 1;
+  color: #212734;
+  border: 1px solid transparent;
+}
+
+.nav-links-desktop a:hover {
+  border-color: #d8dfe9;
+  background: #fff;
+}
+
+.nav-link-secondary {
+  color: #647085 !important;
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-actions-desktop a {
+  border-radius: 999px;
+  border: 1px solid #d7dee8;
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.nav-action-muted {
+  background: #fff;
+  color: #1c2430;
+}
+
+.nav-action-primary {
+  background: #111;
+  color: #fff;
+  border-color: #111;
 }
 
 .nav-links-mobile {
@@ -995,12 +1038,12 @@ th {
 
 @media (max-width: 980px) {
   .nav-shell {
-    min-height: 72px;
+    min-height: 82px;
     gap: 8px;
   }
 
   .brand img {
-    height: 46px;
+    height: 48px;
   }
 
   .brand-name {
@@ -1008,7 +1051,12 @@ th {
     line-height: 1.05;
   }
 
-  .nav-links-desktop {
+  .nav-main {
+    display: none;
+  }
+
+  .nav-links-desktop,
+  .nav-actions-desktop {
     display: none;
   }
 
@@ -1021,7 +1069,7 @@ th {
     width: 100%;
     overflow-x: auto;
     white-space: nowrap;
-    gap: 10px;
+    gap: 8px;
     margin-left: 0;
     padding-bottom: 2px;
     -webkit-overflow-scrolling: touch;
@@ -1031,7 +1079,7 @@ th {
   .nav-links-mobile a {
     border: 1px solid #dcdcdc;
     border-radius: 999px;
-    padding: 8px 12px;
+    padding: 8px 11px;
     background: #fff;
     font-size: 13px;
     line-height: 1;

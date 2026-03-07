@@ -1,8 +1,8 @@
 .homeRoot {
   background:
-    radial-gradient(circle at 20% -8%, rgba(20, 99, 137, 0.08), transparent 35%),
-    radial-gradient(circle at 85% 2%, rgba(201, 137, 74, 0.1), transparent 36%),
-    #f9f8f4;
+    radial-gradient(circle at 16% -8%, rgba(20, 99, 137, 0.09), transparent 36%),
+    radial-gradient(circle at 85% 3%, rgba(201, 137, 74, 0.1), transparent 35%),
+    #f8f7f3;
   color: #17191f;
 }
 
@@ -12,12 +12,12 @@
 }
 
 .heroWrap {
-  padding: 28px 0 8px;
+  padding: 28px 0 10px;
 }
 
 .heroStage {
   position: relative;
-  min-height: 700px;
+  min-height: 760px;
   border-radius: 30px;
   overflow: hidden;
   box-shadow: 0 35px 80px rgba(10, 18, 24, 0.18);
@@ -34,18 +34,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(15, 17, 24, 0.18) 0%, rgba(10, 13, 18, 0.44) 65%, rgba(8, 10, 16, 0.54) 100%);
-}
-
-.heroGlobe {
-  position: absolute;
-  left: 2.5%;
-  bottom: 2%;
-  width: clamp(140px, 22vw, 320px);
-  opacity: 0.3;
-  z-index: 2;
-  pointer-events: none;
-  filter: drop-shadow(0 20px 46px rgba(0, 0, 0, 0.35));
+  background: linear-gradient(180deg, rgba(15, 17, 24, 0.16) 0%, rgba(10, 13, 18, 0.46) 65%, rgba(8, 10, 16, 0.56) 100%);
 }
 
 .heroContent {
@@ -53,12 +42,12 @@
   z-index: 3;
   padding: clamp(26px, 4vw, 64px);
   color: #f9fafc;
-  max-width: 920px;
+  max-width: 980px;
 }
 
 .heroBadge {
   border-color: rgba(255, 255, 255, 0.42);
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.12);
   color: #f8fbff;
 }
 
@@ -106,12 +95,13 @@
 }
 
 .ctaPrimary,
-.ctaSecondary {
+.ctaSecondary,
+.ctaGhost {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  padding: 13px 26px;
+  padding: 13px 24px;
   border: 1px solid transparent;
   font-weight: 700;
   transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
@@ -130,39 +120,85 @@
   backdrop-filter: blur(6px);
 }
 
+.ctaGhost {
+  border-color: rgba(255, 255, 255, 0.34);
+  color: rgba(250, 252, 255, 0.96);
+  background: rgba(8, 16, 30, 0.3);
+}
+
 .ctaPrimary:hover,
-.ctaSecondary:hover {
+.ctaSecondary:hover,
+.ctaGhost:hover {
   transform: translateY(-2px);
 }
 
-.searchCard {
-  margin-top: 26px;
-  width: min(620px, 100%);
-  background: rgba(248, 251, 255, 0.88);
-  border: 1px solid rgba(255, 255, 255, 0.58);
-  border-radius: 18px;
-  padding: 16px;
+.discoveryBar {
+  position: absolute;
+  left: clamp(14px, 2.2vw, 22px);
+  right: clamp(14px, 2.2vw, 22px);
+  bottom: clamp(14px, 2vw, 22px);
+  z-index: 4;
+  background: rgba(250, 253, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 20px;
   box-shadow: 0 14px 28px rgba(7, 16, 32, 0.22);
-  color: #151720;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) 260px;
+  gap: 10px;
+  align-items: end;
 }
 
-.searchTitle {
-  margin: 0;
+.discoveryField {
+  display: grid;
+  gap: 6px;
+}
+
+.discoveryField label {
+  font-size: 12px;
   font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #4f5968;
 }
 
-.searchActions {
-  margin-top: 10px;
-  display: flex;
+.discoveryField input,
+.discoveryField select {
+  border: 1px solid #d8dfeb;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  color: #141922;
+  min-height: 44px;
+}
+
+.discoveryActions {
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 8px;
-  flex-wrap: wrap;
 }
 
-.searchActions a {
-  border: 1px solid #d2d9e4;
+.discoveryPrimary,
+.discoverySecondary {
+  min-height: 44px;
   border-radius: 999px;
-  padding: 8px 11px;
-  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.discoveryPrimary {
+  border: none;
+  background: #111;
+  color: #fff;
+  cursor: pointer;
+}
+
+.discoverySecondary {
+  border: 1px solid #d4dce8;
+  color: #1d2737;
   background: #fff;
 }
 
@@ -173,7 +209,7 @@
 .trustStrip {
   border: 1px solid #e9ebf1;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.95);
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
@@ -184,41 +220,28 @@
   border-radius: 14px;
   border: 1px solid #eef1f6;
   background: linear-gradient(180deg, #ffffff, #f8fafd);
-  padding: 13px 14px;
-}
-
-.trustValue {
-  margin: 0;
-  font-family: "Cormorant Garamond", Georgia, serif;
-  font-size: 2rem;
-  line-height: 1;
+  padding: 14px;
 }
 
 .trustLabel {
-  margin: 6px 0 0;
+  margin: 0;
   font-weight: 700;
 }
 
 .trustHint {
-  margin: 4px 0 0;
+  margin: 6px 0 0;
   color: #6a7080;
   font-size: 13px;
 }
 
 .sectionBlock,
 .sectionBlockAlt,
-.sectionBlockThin,
 .finalCtaSection {
   padding: clamp(56px, 8vw, 110px) 0;
 }
 
 .sectionBlockAlt {
   background: linear-gradient(180deg, rgba(245, 247, 250, 0.9), rgba(248, 245, 240, 0.9));
-}
-
-.sectionBlockThin {
-  padding-top: 28px;
-  padding-bottom: 54px;
 }
 
 .sectionHeader {
@@ -238,6 +261,11 @@
   font-size: clamp(1rem, 1.7vw, 1.2rem);
 }
 
+.sectionTitleInline {
+  margin: 18px 0 10px;
+  font-size: 1.14rem;
+}
+
 .destinationGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -246,7 +274,7 @@
 
 .destinationCard {
   position: relative;
-  min-height: 320px;
+  min-height: 330px;
   border-radius: 22px;
   overflow: hidden;
   isolation: isolate;
@@ -291,62 +319,83 @@
 
 .destinationOverlay p {
   margin: 0;
-  color: rgba(255, 255, 255, 0.86);
+  color: rgba(255, 255, 255, 0.88);
 }
 
-.experienceLayout {
+.destinationMeta {
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.progressMini {
+  margin-top: 10px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+
+.progressMini div {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ffd17c, #ff8b3d);
+}
+
+.offerGrid {
   display: grid;
-  grid-template-columns: 1.3fr 1fr 1fr;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
 }
 
-.experienceMain {
-  grid-row: span 2;
-}
-
-.experienceMainCard,
-.experienceCard {
-  height: 100%;
-  background: #fff;
-  border: 1px solid #e8edf2;
-  border-radius: 20px;
+.offerCard {
+  border: 1px solid #e6ebf1;
+  border-radius: 18px;
   overflow: hidden;
-  display: grid;
-  grid-template-rows: 220px 1fr;
+  background: #fff;
   box-shadow: 0 16px 34px rgba(13, 18, 28, 0.08);
 }
 
-.experienceCard {
-  grid-template-rows: 170px 1fr;
-}
-
-.experienceMainCard img,
-.experienceCard img {
+.offerCard img {
   width: 100%;
-  height: 100%;
+  height: 180px;
   object-fit: cover;
 }
 
-.experienceMainCard div,
-.experienceCard div {
+.offerBody {
   padding: 14px;
 }
 
-.experienceMainCard h3,
-.experienceCard h3 {
-  margin: 9px 0 6px;
+.offerTags {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.offerValue {
+  font-size: 13px;
+  font-weight: 700;
+  color: #99480a;
+}
+
+.offerBody h3 {
+  margin: 10px 0 8px;
   font-size: 1.45rem;
 }
 
-.experienceMainCard p,
-.experienceCard p {
+.offerBody p {
   margin: 0;
   color: #616a76;
+  min-height: 60px;
 }
 
-.experienceMainCard a,
-.experienceCard a {
-  margin-top: 10px;
+.offerBody a {
+  margin-top: 12px;
   display: inline-flex;
   color: #0b5f86;
   font-weight: 700;
@@ -390,68 +439,113 @@
   color: #2e3542;
 }
 
-.rafflePulseCard {
+.rafflePanel {
   border-radius: 18px;
   background: linear-gradient(180deg, #16384e, #0f2534);
   color: #eef8ff;
   padding: 18px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
-.rafflePulseValue {
+.raffleStatRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.raffleStatRow article {
+  border: 1px solid rgba(238, 248, 255, 0.2);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.raffleStatRow article p:last-child {
   margin: 0;
+  font-size: 13px;
+  color: rgba(236, 246, 255, 0.82);
+}
+
+.rafflePulseValue {
+  margin: 0 0 4px;
   font-family: "Cormorant Garamond", Georgia, serif;
-  font-size: clamp(3rem, 6vw, 5rem);
-  line-height: 0.9;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  line-height: 0.92;
+}
+
+.raffleProgressTrack {
+  margin-top: 14px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+
+.raffleProgressTrack div {
+  height: 100%;
+  background: linear-gradient(90deg, #ffd17c, #ff8b3d);
 }
 
 .rafflePulseTag {
-  margin-top: 10px;
+  margin: 10px 0 0;
   border: 1px solid rgba(238, 248, 255, 0.32);
   border-radius: 999px;
   padding: 6px 10px;
   font-size: 13px;
+  width: fit-content;
 }
 
-.benefitsGrid {
+.socialProofGrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 14px;
 }
 
-.benefitCard {
-  border: 1px solid #e8edf2;
-  border-radius: 18px;
+.fillingList {
+  border: 1px solid #e4e9ef;
   background: #fff;
+  border-radius: 20px;
   padding: 18px;
 }
 
-.benefitIcon {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  background: linear-gradient(160deg, #0a678d, #2d8aaf);
-  box-shadow: 0 12px 20px rgba(11, 87, 118, 0.24);
-}
-
-.benefitCard h3 {
-  margin: 12px 0 7px;
-  font-size: 1.4rem;
-}
-
-.benefitCard p {
+.fillingList h3 {
   margin: 0;
-  color: #66707c;
+  font-size: 1.35rem;
+}
+
+.fillingItem {
+  margin-top: 10px;
+  border: 1px solid #e8edf3;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fillingName {
+  margin: 0;
+  font-weight: 700;
+}
+
+.fillingHint {
+  margin: 4px 0 0;
+  color: #5f6874;
+  font-size: 14px;
+}
+
+.fillingItem a {
+  border: 1px solid #d8e2ed;
+  border-radius: 999px;
+  padding: 7px 11px;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .testimonialGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .testimonialCard {
@@ -501,9 +595,71 @@
   letter-spacing: 0.11em;
 }
 
-.galleryGrid {
+.benefitsGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.benefitCard {
+  border: 1px solid #e8edf2;
+  border-radius: 18px;
+  background: #fff;
+  padding: 18px;
+}
+
+.benefitIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #0a678d, #2d8aaf);
+  box-shadow: 0 12px 20px rgba(11, 87, 118, 0.24);
+}
+
+.benefitCard h3 {
+  margin: 12px 0 7px;
+  font-size: 1.4rem;
+}
+
+.benefitCard p {
+  margin: 0;
+  color: #66707c;
+}
+
+.howGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.howCard {
+  border: 1px solid #e8edf2;
+  border-radius: 18px;
+  background: #fff;
+  padding: 18px;
+}
+
+.howIndex {
+  margin: 0;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  font-size: 2rem;
+  line-height: 0.9;
+  color: #0b5f86;
+}
+
+.howCard h3 {
+  margin: 10px 0 8px;
+  font-size: 1.5rem;
+}
+
+.howCard p {
+  margin: 0;
+  color: #66707c;
+}
+
+.galleryGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -518,7 +674,7 @@
 
 .galleryItem img {
   width: 100%;
-  height: 180px;
+  height: 190px;
   object-fit: cover;
 }
 
@@ -526,6 +682,39 @@
   padding: 10px;
   color: #5f6874;
   font-size: 14px;
+}
+
+.utilityBand {
+  border: 1px solid #e2e8f0;
+  border-radius: 22px;
+  background: #fff;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 16px;
+}
+
+.utilityBand article {
+  border: 1px solid #e8edf2;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.utilityBand h3 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.utilityBand p {
+  margin: 8px 0 0;
+  color: #616a76;
+}
+
+.utilityBand a {
+  margin-top: 12px;
+  display: inline-flex;
+  font-weight: 700;
+  color: #0b5f86;
 }
 
 .finalCtaCard {
@@ -553,41 +742,49 @@
   color: rgba(246, 249, 252, 0.92);
 }
 
-.sectionHeaderCompact {
-  text-align: center;
-}
-
-.sectionHeaderCompact h3 {
-  margin: 12px 0 8px;
-  font-size: clamp(1.6rem, 3vw, 2.4rem);
-}
-
-.sectionHeaderCompact p {
-  margin: 0;
-  color: #6a7280;
-}
-
-@media (max-width: 1080px) {
-  .trustStrip {
+@media (max-width: 1180px) {
+  .discoveryBar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .experienceLayout {
+  .discoveryActions {
+    grid-column: 1 / -1;
     grid-template-columns: 1fr 1fr;
   }
 
-  .experienceMain {
-    grid-column: span 2;
-  }
-
-  .benefitsGrid,
-  .testimonialGrid,
-  .galleryGrid {
+  .offerGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .raffleFeature {
+  .benefitsGrid,
+  .howGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trustStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  .heroStage {
+    min-height: 0;
+  }
+
+  .discoveryBar {
+    position: static;
+    margin: 0 14px 14px;
+  }
+
+  .raffleFeature,
+  .socialProofGrid,
+  .utilityBand {
     grid-template-columns: 1fr;
+  }
+
+  .destinationGrid,
+  .galleryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -597,7 +794,6 @@
   }
 
   .heroStage {
-    min-height: 0;
     border-radius: 20px;
   }
 
@@ -614,39 +810,33 @@
     font-size: 1.03rem;
   }
 
-  .heroGlobe {
-    width: 140px;
-    opacity: 0.22;
-  }
-
   .heroActions {
     flex-direction: column;
     align-items: stretch;
   }
 
   .ctaPrimary,
-  .ctaSecondary {
+  .ctaSecondary,
+  .ctaGhost {
     width: 100%;
   }
 
-  .searchCard {
+  .discoveryBar {
+    grid-template-columns: 1fr;
+    margin: 0 12px 12px;
+    border-radius: 16px;
     padding: 12px;
   }
 
-  .searchActions {
-    gap: 6px;
-  }
-
-  .searchActions a {
-    width: 100%;
-    text-align: center;
+  .discoveryActions {
+    grid-template-columns: 1fr;
   }
 
   .trustStrip,
   .destinationGrid,
-  .experienceLayout,
+  .offerGrid,
   .benefitsGrid,
-  .testimonialGrid,
+  .howGrid,
   .galleryGrid {
     grid-template-columns: 1fr;
   }
