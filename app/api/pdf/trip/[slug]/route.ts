@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { NextResponse } from "next/server";
 import { PDFFont, PDFDocument, PDFPage, StandardFonts, rgb } from "pdf-lib";
+import QRCode from "qrcode";
 import { getTripBySlugService } from "@/lib/catalog-service";
 import { createDocumentRecordService } from "@/lib/runtime-service";
 
@@ -383,6 +384,26 @@ export async function GET(
   }
 
   const reserveUrl = `${url.origin}/reservar/${trip.slug}`;
+  const reserveDisplayUrl = reserveUrl.replace(/^https?:\/\//, "");
+  let qrImage: Awaited<ReturnType<typeof pdf.embedPng>> | null = null;
+  try {
+    const qrDataUrl = await QRCode.toDataURL(reserveUrl, {
+      margin: 0,
+      width: 256,
+      errorCorrectionLevel: "M",
+      color: {
+        dark: "#000000",
+        light: "#FFFFFF"
+      }
+    });
+    const base64 = qrDataUrl.split(",")[1];
+    if (base64) {
+      qrImage = await pdf.embedPng(Buffer.from(base64, "base64"));
+    }
+  } catch {
+    qrImage = null;
+  }
+
   page.drawRectangle({ x: 36, y: 58, width: 523, height: 120, color: rgb(0.97, 0.97, 0.97) });
   page.drawText(lang === "es" ? "Politicas" : "Policies", {
     x: 48,
@@ -406,14 +427,31 @@ export async function GET(
     font: titleFont,
     color: rgb(0, 0, 0)
   });
-  drawParagraph(page, reserveUrl, 365, 142, bodyFont, 9, 182, rgb(0.1, 0.1, 0.1));
-  page.drawText("QR: escanear para reservar", {
+  const urlEndY = drawParagraph(page, reserveDisplayUrl, 365, 142, bodyFont, 9, 132, rgb(0.1, 0.1, 0.1));
+  page.drawText(lang === "es" ? "Escanea el QR o entra con link" : "Scan QR or use the link", {
     x: 365,
-    y: 124,
+    y: Math.max(94, urlEndY - 2),
     size: 9,
     font: bodyFont,
     color: rgb(0.35, 0.35, 0.35)
   });
+  if (qrImage) {
+    page.drawRectangle({
+      x: 502,
+      y: 82,
+      width: 48,
+      height: 48,
+      color: rgb(1, 1, 1),
+      borderColor: rgb(0.86, 0.86, 0.86),
+      borderWidth: 0.6
+    });
+    page.drawImage(qrImage, {
+      x: 503.5,
+      y: 83.5,
+      width: 45,
+      height: 45
+    });
+  }
 
   const bytes = await pdf.save();
 
