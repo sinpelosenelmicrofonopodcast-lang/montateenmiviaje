@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import {
   getRaffleByIdService,
+  getRafflePublicSummaryService,
+  getRaffleVerificationPayloadService,
   listAvailableRaffleNumbersService,
+  listPublicRaffleParticipantsService,
   listRaffleEntriesService
 } from "@/lib/raffles-service";
 
@@ -16,6 +19,15 @@ export async function GET(
     if (!raffle) {
       return NextResponse.json({ message: "Sorteo no encontrado" }, { status: 404 });
     }
+    if (raffle.status === "draft") {
+      return NextResponse.json({ message: "Sorteo no disponible" }, { status: 404 });
+    }
+
+    const [summary, participants, verification] = await Promise.all([
+      getRafflePublicSummaryService(id),
+      listPublicRaffleParticipantsService(id),
+      getRaffleVerificationPayloadService(id)
+    ]);
 
     const entries = await listRaffleEntriesService(id);
     const availableNumbers = (await listAvailableRaffleNumbersService(id)) ?? [];
@@ -26,7 +38,10 @@ export async function GET(
       entriesCount: entries.length,
       confirmedEntriesCount,
       availableNumbersCount: availableNumbers.length,
-      availableNumbers
+      availableNumbers,
+      publicSummary: summary,
+      publicParticipants: participants,
+      verification
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Error interno";

@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createRaffleService, listRaffleEntriesService, listRafflesService } from "@/lib/raffles-service";
+import {
+  createRaffleService,
+  getRaffleAdminSnapshotService,
+  listRaffleEntriesService,
+  listRafflesService
+} from "@/lib/raffles-service";
 
 const createSchema = z.object({
   title: z.string().min(3),
@@ -21,11 +26,31 @@ const createSchema = z.object({
   status: z.enum(["draft", "published", "closed"]),
   seoTitle: z.string().optional(),
   seoDescription: z.string().optional(),
-  seoOgImage: z.string().optional()
+  seoOgImage: z.string().optional(),
+  publicParticipantsEnabled: z.boolean().optional(),
+  publicParticipantsMode: z.enum(["hidden", "name_only", "name_number", "masked"]).optional(),
+  publicNumbersVisibility: z.boolean().optional(),
+  publicNumberGridMode: z.enum(["full", "available_only", "sold_only", "totals_only"]).optional(),
+  publicWinnerName: z.boolean().optional(),
+  verificationMode: z.enum(["none", "commit_reveal"]).optional(),
+  publicSeed: z.string().optional(),
+  referralEnabled: z.boolean().optional(),
+  viralCounterEnabled: z.boolean().optional(),
+  urgencyMessage: z.string().optional(),
+  publicActivityEnabled: z.boolean().optional(),
+  liveDrawEnabled: z.boolean().optional()
 });
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const raffleId = searchParams.get("raffleId");
+
+    if (raffleId) {
+      const snapshot = await getRaffleAdminSnapshotService(raffleId);
+      return NextResponse.json({ snapshot });
+    }
+
     const [raffles, entries] = await Promise.all([
       listRafflesService({ includeDrafts: true }),
       listRaffleEntriesService()

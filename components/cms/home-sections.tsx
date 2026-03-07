@@ -226,19 +226,27 @@ function renderHero(section: PageSection) {
   const secondaryCtaLabel = asString(content.secondaryCtaLabel);
   const secondaryCtaHref = asString(content.secondaryCtaHref);
   const backgroundImage = section.imageUrl || asString(content.backgroundImage);
+  const fallbackSunsetImage =
+    "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1800&q=80";
+  const heroBackground = backgroundImage || fallbackSunsetImage;
   const backgroundImageUrl = backgroundImage ? toPublicImageSrc(backgroundImage) : "";
-  const shellStyle = backgroundImage
-    ? {
-        backgroundImage: `linear-gradient(rgba(0,0,0,0.64), rgba(0,0,0,0.76)), url("${backgroundImageUrl}")`,
-        backgroundSize: "cover",
-        backgroundPosition: "center"
-      }
-    : undefined;
+  const shellStyle = {
+    backgroundImage: `linear-gradient(120deg, rgba(15, 12, 20, 0.58), rgba(63, 25, 10, 0.35), rgba(210, 124, 59, 0.22)), url("${
+      backgroundImage ? backgroundImageUrl : heroBackground
+    }")`,
+    backgroundSize: "cover",
+    backgroundPosition: "center"
+  };
+  const heroTitle = section.title || "El mundo es grande... tu próxima aventura empieza aquí.";
+  const heroSubtitle = section.subtitle || "Vuelos, hoteles y experiencias inolvidables en un solo lugar.";
+  const primaryCtaLabel = section.ctaLabel || "Buscar mi viaje";
+  const primaryCtaHref = section.ctaHref || "/viajes";
 
   return (
     <section key={section.id} className="hero container">
       <div className="hero-shell" style={shellStyle}>
-        <div>
+        <img src="/logo.png" alt="Móntate en mi viaje" className="hero-overlay-globe" />
+        <div className="hero-copy">
           <p className="chip">{section.badge || "Premium Travel"}</p>
           {badges.length > 0 ? (
             <div className="tag-row">
@@ -249,14 +257,12 @@ function renderHero(section: PageSection) {
               ))}
             </div>
           ) : null}
-          <h1>{section.title || "Viajes premium"}</h1>
-          {section.subtitle ? <p>{section.subtitle}</p> : null}
+          <h1>{heroTitle}</h1>
+          <p className="hero-subtitle">{heroSubtitle}</p>
           <div className="hero-actions">
-            {section.ctaLabel && section.ctaHref ? (
-              <Link className="button-primary" href={section.ctaHref}>
-                {section.ctaLabel}
-              </Link>
-            ) : null}
+            <Link className="button-primary hero-cta" href={primaryCtaHref}>
+              {primaryCtaLabel}
+            </Link>
             {secondaryCtaLabel && secondaryCtaHref ? (
               <Link className="button-outline" href={secondaryCtaHref}>
                 {secondaryCtaLabel}
@@ -264,14 +270,16 @@ function renderHero(section: PageSection) {
             ) : null}
           </div>
         </div>
-        <div className="stats">
-          {statCards.map((card, index) => (
-            <article className="stat-card" key={`${section.id}-stat-${index}`}>
-              <h3>{asString(card.value)}</h3>
-              <p>{asString(card.label)}</p>
-            </article>
-          ))}
-        </div>
+        {statCards.length > 0 ? (
+          <div className="stats">
+            {statCards.map((card, index) => (
+              <article className="stat-card" key={`${section.id}-stat-${index}`}>
+                <h3>{asString(card.value)}</h3>
+                <p>{asString(card.label)}</p>
+              </article>
+            ))}
+          </div>
+        ) : null}
       </div>
     </section>
   );

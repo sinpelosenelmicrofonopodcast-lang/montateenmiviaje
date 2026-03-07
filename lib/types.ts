@@ -254,7 +254,21 @@ export interface EmailLog {
 }
 
 export type RaffleStatus = "draft" | "published" | "closed";
-export type RaffleEntryStatus = "pending_payment" | "pending_review" | "confirmed" | "rejected";
+export type RaffleParticipantsMode = "hidden" | "name_only" | "name_number" | "masked";
+export type RaffleNumberGridMode = "full" | "available_only" | "sold_only" | "totals_only";
+export type RaffleVerificationMode = "none" | "commit_reveal";
+export type RaffleDrawAlgorithm = "sha256-modulo-v1";
+export type RaffleEntryStatus = "pending_payment" | "pending_review" | "confirmed" | "rejected" | "cancelled";
+export type RaffleNumberStatus =
+  | "available"
+  | "blocked"
+  | "reserved"
+  | "pending_manual_review"
+  | "sold"
+  | "cancelled"
+  | "winner";
+export type RaffleEntrySource = "online" | "offline" | "admin_manual";
+export type RaffleManualPaymentMethod = "paypal" | "zelle" | "cashapp" | "ath_movil" | "cash" | "venmo" | "other";
 
 export interface Raffle {
   id: string;
@@ -281,6 +295,22 @@ export interface Raffle {
   seoTitle?: string;
   seoDescription?: string;
   seoOgImage?: string;
+  publicParticipantsEnabled?: boolean;
+  publicParticipantsMode?: RaffleParticipantsMode;
+  publicNumbersVisibility?: boolean;
+  publicNumberGridMode?: RaffleNumberGridMode;
+  publicWinnerName?: boolean;
+  verificationMode?: RaffleVerificationMode;
+  publicSeed?: string;
+  secretCommitHash?: string;
+  drawAlgorithm?: RaffleDrawAlgorithm;
+  drawPayloadJson?: Record<string, unknown>;
+  referralEnabled?: boolean;
+  viralCounterEnabled?: boolean;
+  urgencyMessage?: string;
+  publicActivityEnabled?: boolean;
+  liveDrawEnabled?: boolean;
+  updatedAt?: string;
   createdAt: string;
 }
 
@@ -293,5 +323,64 @@ export interface RaffleEntry {
   paymentReference?: string;
   note?: string;
   status: RaffleEntryStatus;
+  source?: RaffleEntrySource;
+  publicDisplayName?: string;
+  consentPublicListing?: boolean;
+  paymentMethod?: string;
+  phone?: string;
+  referralCode?: string;
+  referredByCode?: string;
+  updatedAt?: string;
   createdAt: string;
+}
+
+export interface RaffleNumber {
+  id: string;
+  raffleId: string;
+  numberValue: number;
+  status: RaffleNumberStatus;
+  entryId?: string;
+  customerId?: string;
+  customerEmail?: string;
+  source: RaffleEntrySource;
+  assignedOffline: boolean;
+  paymentMethod?: string;
+  adminNote?: string;
+  blockedReason?: string;
+  blockedBy?: string;
+  blockedAt?: string;
+  updatedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RafflePayment {
+  id: string;
+  raffleId: string;
+  entryId?: string;
+  customerId?: string;
+  customerEmail?: string;
+  amount: number;
+  currency: string;
+  paymentMethod: RaffleManualPaymentMethod;
+  paymentReference?: string;
+  screenshotUrl?: string;
+  isManual: boolean;
+  manuallyVerified: boolean;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  adminNote?: string;
+  verifiedBy?: string;
+  verifiedAt?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicRaffleParticipant {
+  entryId: string;
+  displayName: string;
+  chosenNumber?: number;
+  status: RaffleEntryStatus;
+  createdAt: string;
+  source: RaffleEntrySource;
 }

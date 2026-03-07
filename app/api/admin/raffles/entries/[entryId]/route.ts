@@ -3,7 +3,7 @@ import { z } from "zod";
 import { updateRaffleEntryStatusService } from "@/lib/raffles-service";
 
 const schema = z.object({
-  status: z.enum(["pending_payment", "pending_review", "confirmed", "rejected"])
+  status: z.enum(["pending_payment", "pending_review", "confirmed", "rejected", "cancelled"])
 });
 
 export async function PATCH(

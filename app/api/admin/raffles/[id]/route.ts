@@ -21,7 +21,19 @@ const schema = z.object({
   status: z.enum(["draft", "published", "closed"]).optional(),
   seoTitle: z.string().optional(),
   seoDescription: z.string().optional(),
-  seoOgImage: z.string().optional()
+  seoOgImage: z.string().optional(),
+  publicParticipantsEnabled: z.boolean().optional(),
+  publicParticipantsMode: z.enum(["hidden", "name_only", "name_number", "masked"]).optional(),
+  publicNumbersVisibility: z.boolean().optional(),
+  publicNumberGridMode: z.enum(["full", "available_only", "sold_only", "totals_only"]).optional(),
+  publicWinnerName: z.boolean().optional(),
+  verificationMode: z.enum(["none", "commit_reveal"]).optional(),
+  publicSeed: z.string().optional(),
+  referralEnabled: z.boolean().optional(),
+  viralCounterEnabled: z.boolean().optional(),
+  urgencyMessage: z.string().optional(),
+  publicActivityEnabled: z.boolean().optional(),
+  liveDrawEnabled: z.boolean().optional()
 });
 
 export async function PATCH(

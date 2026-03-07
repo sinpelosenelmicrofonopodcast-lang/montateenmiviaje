@@ -7,7 +7,12 @@ const joinSchema = z.object({
   customerEmail: z.string().email(),
   chosenNumber: z.number().int().positive(),
   note: z.string().max(400).optional(),
-  paymentReference: z.string().max(120).optional()
+  paymentReference: z.string().max(120).optional(),
+  referredByCode: z.string().max(40).optional(),
+  publicDisplayName: z.string().max(120).optional(),
+  consentPublicListing: z.boolean().optional(),
+  paymentMethod: z.string().max(40).optional(),
+  phone: z.string().max(50).optional()
 });
 
 export async function GET() {
@@ -28,7 +33,14 @@ export async function POST(request: Request) {
       payload.customerEmail,
       payload.chosenNumber,
       payload.note,
-      payload.paymentReference
+      payload.paymentReference,
+      {
+        referredByCode: payload.referredByCode,
+        publicDisplayName: payload.publicDisplayName,
+        consentPublicListing: payload.consentPublicListing,
+        paymentMethod: payload.paymentMethod,
+        phone: payload.phone
+      }
     );
     return NextResponse.json({ ok: true, entry });
   } catch (error) {

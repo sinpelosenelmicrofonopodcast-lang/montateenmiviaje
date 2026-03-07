@@ -24,6 +24,10 @@ export function RaffleEntryForm({
   const [customerEmail, setCustomerEmail] = useState("");
   const [paymentReference, setPaymentReference] = useState("");
   const [note, setNote] = useState("");
+  const [phone, setPhone] = useState("");
+  const [publicDisplayName, setPublicDisplayName] = useState("");
+  const [consentPublicListing, setConsentPublicListing] = useState(true);
+  const [referredByCode, setReferredByCode] = useState("");
   const [availableNumbers, setAvailableNumbers] = useState(initialAvailableNumbers);
   const [chosenNumber, setChosenNumber] = useState("");
   const [loading, setLoading] = useState(false);
@@ -53,7 +57,11 @@ export function RaffleEntryForm({
           customerEmail,
           chosenNumber: selectedNumber,
           note,
-          paymentReference: paymentReference || undefined
+          paymentReference: paymentReference || undefined,
+          phone: phone || undefined,
+          publicDisplayName: publicDisplayName || undefined,
+          consentPublicListing,
+          referredByCode: referredByCode || undefined
         })
       });
 
@@ -68,6 +76,10 @@ export function RaffleEntryForm({
       setChosenNumber("");
       setNote("");
       setPaymentReference("");
+      setPhone("");
+      setPublicDisplayName("");
+      setReferredByCode("");
+      setConsentPublicListing(true);
     } catch (joinError) {
       const errMessage = joinError instanceof Error ? joinError.message : "Error inesperado";
       setError(errMessage);
@@ -86,6 +98,18 @@ export function RaffleEntryForm({
       <label>
         Correo registrado
         <input type="email" value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} required />
+      </label>
+      <label>
+        Nombre para lista pública (opcional)
+        <input value={publicDisplayName} onChange={(event) => setPublicDisplayName(event.target.value)} placeholder="Ej: Juan C." />
+      </label>
+      <label>
+        Teléfono (opcional)
+        <input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Ej: +1 787..." />
+      </label>
+      <label>
+        Código de referido (opcional)
+        <input value={referredByCode} onChange={(event) => setReferredByCode(event.target.value)} placeholder="Ej: JUAN-1234" />
       </label>
       <label>
         Elige tu número de lotería
@@ -126,6 +150,14 @@ export function RaffleEntryForm({
       <label>
         Nota adicional
         <textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} />
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={consentPublicListing}
+          onChange={(event) => setConsentPublicListing(event.target.checked)}
+        />
+        Permito aparecer en lista pública del sorteo
       </label>
       <button className="button-dark" type="submit" disabled={loading || availableNumbers.length === 0 || joined}>
         {loading ? "Enviando..." : availableNumbers.length === 0 ? "Números agotados" : "Enviar participación"}

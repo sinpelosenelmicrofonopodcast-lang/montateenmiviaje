@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { drawRaffleWinnerService } from "@/lib/raffles-service";
+import { drawRaffleWinnerService, verifyRaffleDrawService } from "@/lib/raffles-service";
 
 export async function POST(
   _request: Request,
@@ -8,10 +8,12 @@ export async function POST(
   try {
     const { id } = await params;
     const result = await drawRaffleWinnerService(id);
+    const verification = await verifyRaffleDrawService(id);
 
     return NextResponse.json({
       ok: true,
       raffle: result.raffle,
+      verification,
       winner: result.winnerEntry
         ? {
             entryId: result.winnerEntry.id,
