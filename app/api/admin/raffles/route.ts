@@ -7,6 +7,32 @@ import {
   listRafflesService
 } from "@/lib/raffles-service";
 
+const paymentLinkSchema = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  href: z.string().min(2),
+  active: z.boolean()
+});
+
+const paymentMethodSchema = z.object({
+  provider: z.string().min(1),
+  enabled: z.boolean(),
+  label: z.string().min(1),
+  instructions: z.string().optional(),
+  destinationValue: z.string().optional(),
+  href: z.string().optional(),
+  displayOrder: z.number().int().optional(),
+  requiresReference: z.boolean().optional(),
+  requiresScreenshot: z.boolean().optional(),
+  isAutomatic: z.boolean().optional(),
+  config: z.record(z.string(), z.unknown()).optional()
+});
+
+const faqItemSchema = z.object({
+  question: z.string().min(1),
+  answer: z.string().min(1)
+});
+
 const createSchema = z.object({
   title: z.string().min(3),
   description: z.string().min(5),
@@ -34,11 +60,20 @@ const createSchema = z.object({
   publicWinnerName: z.boolean().optional(),
   verificationMode: z.enum(["none", "commit_reveal"]).optional(),
   publicSeed: z.string().optional(),
+  publicSubtitle: z.string().optional(),
+  publicCtaLabel: z.string().optional(),
+  promoBadges: z.array(z.string().min(1)).max(20).optional(),
+  faqItems: z.array(faqItemSchema).max(30).optional(),
+  prizeIncludes: z.array(z.string().min(1)).max(30).optional(),
+  howToJoinItems: z.array(z.string().min(1)).max(20).optional(),
+  paymentMethods: z.array(paymentMethodSchema).max(30).optional(),
   referralEnabled: z.boolean().optional(),
   viralCounterEnabled: z.boolean().optional(),
   urgencyMessage: z.string().optional(),
   publicActivityEnabled: z.boolean().optional(),
-  liveDrawEnabled: z.boolean().optional()
+  liveDrawEnabled: z.boolean().optional(),
+  paymentLinks: z.array(paymentLinkSchema).max(30).optional(),
+  paymentLinksNote: z.string().optional()
 });
 
 export async function GET(request: Request) {

@@ -12,6 +12,7 @@ const joinSchema = z.object({
   publicDisplayName: z.string().max(120).optional(),
   consentPublicListing: z.boolean().optional(),
   paymentMethod: z.string().max(40).optional(),
+  paymentScreenshotUrl: z.string().max(1000).optional(),
   phone: z.string().max(50).optional()
 });
 
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
         publicDisplayName: payload.publicDisplayName,
         consentPublicListing: payload.consentPublicListing,
         paymentMethod: payload.paymentMethod,
+        paymentScreenshotUrl: payload.paymentScreenshotUrl,
         phone: payload.phone
       }
     );

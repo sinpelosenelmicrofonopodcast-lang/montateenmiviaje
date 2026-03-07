@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Raffle, RaffleEntry, RaffleNumber, RafflePayment } from "@/lib/types";
+import { toPublicImageSrc } from "@/lib/image-url";
+import { Raffle, RaffleEntry, RaffleNumber, RafflePayment, RafflePaymentMethodConfig } from "@/lib/types";
 
 type AdminTab = "overview" | "numbers" | "entries" | "payments" | "referrals" | "live" | "settings" | "audit";
 
@@ -59,6 +60,127 @@ function yesNo(value: boolean | undefined) {
   return value ? "Sí" : "No";
 }
 
+type PaymentMethodDraft = RafflePaymentMethodConfig;
+
+interface RaffleSettingsDraft {
+  publicParticipantsEnabled: boolean;
+  publicParticipantsMode: "hidden" | "name_only" | "name_number" | "masked";
+  publicNumbersVisibility: boolean;
+  publicNumberGridMode: "full" | "available_only" | "sold_only" | "totals_only";
+  publicWinnerName: boolean;
+  verificationMode: "none" | "commit_reveal";
+  referralEnabled: boolean;
+  viralCounterEnabled: boolean;
+  publicActivityEnabled: boolean;
+  liveDrawEnabled: boolean;
+  urgencyMessage: string;
+  publicSubtitle: string;
+  publicCtaLabel: string;
+  promoBadgesText: string;
+  prizeIncludesText: string;
+  howToJoinText: string;
+  faqText: string;
+  paymentMethods: PaymentMethodDraft[];
+  paymentLinksNote: string;
+}
+
+const PRESET_PAYMENT_METHODS: Array<{ key: string; label: string }> = [
+  { key: "stripe", label: "Tarjeta / Stripe" },
+  { key: "paypal", label: "PayPal" },
+  { key: "ath_movil", label: "ATH Movil" },
+  { key: "zelle", label: "Zelle" },
+  { key: "cashapp", label: "Cash App" },
+  { key: "venmo", label: "Venmo" },
+  { key: "bank_transfer", label: "Transferencia bancaria" }
+];
+
+function createDefaultPaymentMethods(): PaymentMethodDraft[] {
+  return PRESET_PAYMENT_METHODS.map((method, index) => ({
+    provider: method.key,
+    enabled: false,
+    label: method.label,
+    instructions: "",
+    destinationValue: "",
+    href: "",
+    displayOrder: index,
+    requiresReference: true,
+    requiresScreenshot: false,
+    isAutomatic: method.key === "stripe",
+    config: {}
+  }));
+}
+
+function buildPaymentMethodsForSettings(raffle: Raffle | null): PaymentMethodDraft[] {
+  const baseMap = new Map<string, PaymentMethodDraft>();
+
+  for (const method of createDefaultPaymentMethods()) {
+    baseMap.set(method.provider, method);
+  }
+
+  const existing = raffle?.paymentMethods ?? [];
+  for (const method of existing) {
+    const provider = method.provider.trim().toLowerCase();
+    if (!provider) continue;
+    baseMap.set(provider, {
+      provider,
+      enabled: method.enabled ?? true,
+      label: method.label || provider,
+      instructions: method.instructions ?? "",
+      destinationValue: method.destinationValue ?? "",
+      href: method.href ?? "",
+      displayOrder: Number.isFinite(method.displayOrder) ? method.displayOrder : 0,
+      requiresReference: Boolean(method.requiresReference),
+      requiresScreenshot: Boolean(method.requiresScreenshot),
+      isAutomatic: Boolean(method.isAutomatic),
+      config: method.config ?? {}
+    });
+  }
+
+  return Array.from(baseMap.values()).sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
+}
+
+function createDefaultSettingsDraft(): RaffleSettingsDraft {
+  return {
+    publicParticipantsEnabled: false,
+    publicParticipantsMode: "masked",
+    publicNumbersVisibility: true,
+    publicNumberGridMode: "full",
+    publicWinnerName: false,
+    verificationMode: "commit_reveal",
+    referralEnabled: true,
+    viralCounterEnabled: true,
+    publicActivityEnabled: true,
+    liveDrawEnabled: true,
+    urgencyMessage: "",
+    publicSubtitle: "",
+    publicCtaLabel: "",
+    promoBadgesText: "",
+    prizeIncludesText: "",
+    howToJoinText: "",
+    faqText: "",
+    paymentMethods: createDefaultPaymentMethods(),
+    paymentLinksNote: ""
+  };
+}
+
+function toLines(value: string) {
+  return value
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseFaqText(value: string) {
+  return toLines(value)
+    .map((line) => line.split("|").map((item) => item.trim()))
+    .filter((parts) => parts.length >= 2 && parts[0] && parts[1])
+    .map(([question, answer]) => ({ question, answer }));
+}
+
+function faqItemsToText(items: Array<{ question: string; answer: string }> | undefined) {
+  return (items ?? []).map((item) => `${item.question} | ${item.answer}`).join("\n");
+}
+
 export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRafflePanelProps) {
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
   const [raffles, setRaffles] = useState(initialRaffles);
@@ -86,19 +208,7 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
     note: "",
     markAsConfirmed: true
   });
-  const [settings, setSettings] = useState({
-    publicParticipantsEnabled: false,
-    publicParticipantsMode: "masked",
-    publicNumbersVisibility: true,
-    publicNumberGridMode: "full",
-    publicWinnerName: false,
-    verificationMode: "commit_reveal",
-    referralEnabled: true,
-    viralCounterEnabled: true,
-    publicActivityEnabled: true,
-    liveDrawEnabled: true,
-    urgencyMessage: ""
-  });
+  const [settings, setSettings] = useState<RaffleSettingsDraft>(() => createDefaultSettingsDraft());
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -122,6 +232,7 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
   });
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
   const [drawingId, setDrawingId] = useState<string | null>(null);
   const [liveVerification, setLiveVerification] = useState<Record<string, unknown> | null>(null);
 
@@ -171,6 +282,7 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
       seoOgImage: ""
     });
     setEditingRaffleId(null);
+    setSettings(createDefaultSettingsDraft());
   }
 
   function syncSettingsFromRaffle(raffle: Raffle | null) {
@@ -189,7 +301,15 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
       viralCounterEnabled: raffle.viralCounterEnabled ?? true,
       publicActivityEnabled: raffle.publicActivityEnabled ?? true,
       liveDrawEnabled: raffle.liveDrawEnabled ?? true,
-      urgencyMessage: raffle.urgencyMessage ?? ""
+      urgencyMessage: raffle.urgencyMessage ?? "",
+      publicSubtitle: raffle.publicSubtitle ?? "",
+      publicCtaLabel: raffle.publicCtaLabel ?? raffle.ctaLabel ?? "",
+      promoBadgesText: (raffle.promoBadges ?? []).join("\n"),
+      prizeIncludesText: (raffle.prizeIncludes ?? []).join("\n"),
+      howToJoinText: (raffle.howToJoinItems ?? []).join("\n"),
+      faqText: faqItemsToText(raffle.faqItems),
+      paymentMethods: buildPaymentMethodsForSettings(raffle),
+      paymentLinksNote: raffle.paymentLinksNote ?? ""
     });
   }
 
@@ -263,6 +383,53 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRaffleId]);
 
+  async function handleBannerUpload(file: File) {
+    setUploadingBanner(true);
+    setError(null);
+    setFeedback(null);
+
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+      formData.set("slug", form.title || "raffle");
+
+      const response = await fetch("/api/admin/uploads/raffle-banner", {
+        method: "POST",
+        body: formData
+      });
+
+      const payload = (await response.json()) as { url?: string; message?: string };
+      if (!response.ok || !payload.url) {
+        throw new Error(payload.message ?? "No se pudo subir banner");
+      }
+
+      setForm((current) => ({ ...current, imageUrl: payload.url ?? "" }));
+      setFeedback("Banner subido y asignado a la rifa.");
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "No se pudo subir banner");
+    } finally {
+      setUploadingBanner(false);
+    }
+  }
+
+  function buildPaymentMethodsPayload() {
+    return settings.paymentMethods
+      .map((method, index) => ({
+        provider: method.provider.trim().toLowerCase(),
+        enabled: Boolean(method.enabled),
+        label: method.label.trim(),
+        instructions: method.instructions?.trim() || undefined,
+        destinationValue: method.destinationValue?.trim() || undefined,
+        href: method.href?.trim() || undefined,
+        displayOrder: Number.isFinite(method.displayOrder) ? Number(method.displayOrder) : index,
+        requiresReference: Boolean(method.requiresReference),
+        requiresScreenshot: Boolean(method.requiresScreenshot),
+        isAutomatic: Boolean(method.isAutomatic),
+        config: method.config ?? {}
+      }))
+      .filter((method) => method.provider && method.label);
+  }
+
   async function saveRaffle(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFeedback(null);
@@ -273,6 +440,16 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
       if (Number.isNaN(drawAtDate.getTime())) {
         throw new Error("Define una fecha/hora válida para anunciar el ganador");
       }
+
+      const paymentMethodsPayload = buildPaymentMethodsPayload();
+      const paymentLinksPayload = paymentMethodsPayload
+        .filter((method) => method.enabled && method.href)
+        .map((method) => ({
+          key: method.provider,
+          label: method.label,
+          href: method.href!,
+          active: true
+        }));
 
       const payload = {
         title: form.title,
@@ -294,7 +471,16 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
         seoTitle: form.seoTitle || undefined,
         seoDescription: form.seoDescription || undefined,
         seoOgImage: form.seoOgImage || undefined,
-        ...settings
+        ...settings,
+        publicSubtitle: settings.publicSubtitle.trim() || undefined,
+        publicCtaLabel: settings.publicCtaLabel.trim() || undefined,
+        promoBadges: toLines(settings.promoBadgesText),
+        prizeIncludes: toLines(settings.prizeIncludesText),
+        howToJoinItems: toLines(settings.howToJoinText),
+        faqItems: parseFaqText(settings.faqText),
+        paymentMethods: paymentMethodsPayload,
+        paymentLinks: paymentLinksPayload,
+        paymentLinksNote: settings.paymentLinksNote.trim() || undefined
       };
 
       const response = await fetch(editingRaffleId ? `/api/admin/raffles/${editingRaffleId}` : "/api/admin/raffles", {
@@ -542,11 +728,31 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
 
     setFeedback(null);
     setError(null);
+    const paymentMethodsPayload = buildPaymentMethodsPayload();
+    const paymentLinksPayload = paymentMethodsPayload
+      .filter((method) => method.enabled && method.href)
+      .map((method) => ({
+        key: method.provider,
+        label: method.label,
+        href: method.href!,
+        active: true
+      }));
 
     const response = await fetch(`/api/admin/raffles/${selectedRaffleId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(settings)
+      body: JSON.stringify({
+        ...settings,
+        publicSubtitle: settings.publicSubtitle.trim() || undefined,
+        publicCtaLabel: settings.publicCtaLabel.trim() || undefined,
+        promoBadges: toLines(settings.promoBadgesText),
+        prizeIncludes: toLines(settings.prizeIncludesText),
+        howToJoinItems: toLines(settings.howToJoinText),
+        faqItems: parseFaqText(settings.faqText),
+        paymentMethods: paymentMethodsPayload,
+        paymentLinks: paymentLinksPayload,
+        paymentLinksNote: settings.paymentLinksNote.trim() || undefined
+      })
     });
 
     const payload = (await response.json()) as { message?: string };
@@ -559,6 +765,52 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
     await refreshBase();
     await refreshSnapshot();
     setFeedback("Ajustes de visibilidad y draw guardados.");
+  }
+
+  function updatePaymentMethodAt(index: number, patch: Partial<PaymentMethodDraft>) {
+    setSettings((current) => {
+      const nextMethods = [...current.paymentMethods];
+      const target = nextMethods[index];
+      if (!target) {
+        return current;
+      }
+      nextMethods[index] = { ...target, ...patch };
+      return { ...current, paymentMethods: nextMethods };
+    });
+  }
+
+  function addCustomPaymentMethod() {
+    setSettings((current) => ({
+      ...current,
+      paymentMethods: [
+        ...current.paymentMethods,
+        {
+          provider: "other",
+          enabled: false,
+          label: "Otro",
+          instructions: "",
+          destinationValue: "",
+          href: "",
+          displayOrder: current.paymentMethods.length,
+          requiresReference: true,
+          requiresScreenshot: false,
+          isAutomatic: false,
+          config: {}
+        }
+      ]
+    }));
+  }
+
+  function removePaymentMethod(index: number) {
+    setSettings((current) => {
+      if (current.paymentMethods.length <= 1) {
+        return current;
+      }
+      return {
+        ...current,
+        paymentMethods: current.paymentMethods.filter((_, currentIndex) => currentIndex !== index)
+      };
+    });
   }
 
   function toggleNumberSelection(number: number) {
@@ -592,6 +844,28 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
             Imagen URL
             <input value={form.imageUrl} onChange={(event) => setForm({ ...form, imageUrl: event.target.value })} />
           </label>
+          <label>
+            Subir banner
+            <input
+              type="file"
+              accept="image/*"
+              disabled={uploadingBanner}
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                if (file) {
+                  void handleBannerUpload(file);
+                }
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
+          {uploadingBanner ? <p className="muted request-full">Subiendo banner...</p> : null}
+          {form.imageUrl ? (
+            <div className="request-full">
+              <p className="muted">Preview banner</p>
+              <img src={toPublicImageSrc(form.imageUrl)} alt="Preview banner rifa" className="trip-card-image" />
+            </div>
+          ) : null}
           <label>
             CTA label
             <input value={form.ctaLabel} onChange={(event) => setForm({ ...form, ctaLabel: event.target.value })} />
@@ -1059,7 +1333,15 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
                 </label>
                 <label>
                   Participants mode
-                  <select value={settings.publicParticipantsMode} onChange={(event) => setSettings({ ...settings, publicParticipantsMode: event.target.value })}>
+                  <select
+                    value={settings.publicParticipantsMode}
+                    onChange={(event) =>
+                      setSettings({
+                        ...settings,
+                        publicParticipantsMode: event.target.value as RaffleSettingsDraft["publicParticipantsMode"]
+                      })
+                    }
+                  >
                     <option value="hidden">hidden</option>
                     <option value="name_only">name_only</option>
                     <option value="name_number">name_number</option>
@@ -1075,7 +1357,15 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
                 </label>
                 <label>
                   Grid mode
-                  <select value={settings.publicNumberGridMode} onChange={(event) => setSettings({ ...settings, publicNumberGridMode: event.target.value })}>
+                  <select
+                    value={settings.publicNumberGridMode}
+                    onChange={(event) =>
+                      setSettings({
+                        ...settings,
+                        publicNumberGridMode: event.target.value as RaffleSettingsDraft["publicNumberGridMode"]
+                      })
+                    }
+                  >
                     <option value="full">full</option>
                     <option value="available_only">available_only</option>
                     <option value="sold_only">sold_only</option>
@@ -1091,7 +1381,15 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
                 </label>
                 <label>
                   Verification mode
-                  <select value={settings.verificationMode} onChange={(event) => setSettings({ ...settings, verificationMode: event.target.value })}>
+                  <select
+                    value={settings.verificationMode}
+                    onChange={(event) =>
+                      setSettings({
+                        ...settings,
+                        verificationMode: event.target.value as RaffleSettingsDraft["verificationMode"]
+                      })
+                    }
+                  >
                     <option value="commit_reveal">commit_reveal</option>
                     <option value="none">none</option>
                   </select>
@@ -1128,6 +1426,176 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
                   Mensaje de urgencia
                   <input value={settings.urgencyMessage} onChange={(event) => setSettings({ ...settings, urgencyMessage: event.target.value })} />
                 </label>
+                <label className="request-full">
+                  Subtítulo público del hero
+                  <input
+                    value={settings.publicSubtitle}
+                    onChange={(event) => setSettings({ ...settings, publicSubtitle: event.target.value })}
+                    placeholder="Ej: Participa por una experiencia inolvidable."
+                  />
+                </label>
+                <label>
+                  CTA público
+                  <input
+                    value={settings.publicCtaLabel}
+                    onChange={(event) => setSettings({ ...settings, publicCtaLabel: event.target.value })}
+                    placeholder="Participar ahora"
+                  />
+                </label>
+                <label className="request-full">
+                  Nota para métodos de pago
+                  <input
+                    value={settings.paymentLinksNote}
+                    onChange={(event) => setSettings({ ...settings, paymentLinksNote: event.target.value })}
+                    placeholder="Ej: Envía tu pago y coloca la referencia al participar."
+                  />
+                </label>
+                <label className="request-full">
+                  Badges promocionales (1 por línea)
+                  <textarea
+                    rows={3}
+                    value={settings.promoBadgesText}
+                    onChange={(event) => setSettings({ ...settings, promoBadgesText: event.target.value })}
+                    placeholder={"Premio exclusivo\nSorteo verificado\nNúmeros limitados"}
+                  />
+                </label>
+                <label className="request-full">
+                  Qué incluye el premio (1 por línea)
+                  <textarea
+                    rows={3}
+                    value={settings.prizeIncludesText}
+                    onChange={(event) => setSettings({ ...settings, prizeIncludesText: event.target.value })}
+                  />
+                </label>
+                <label className="request-full">
+                  Cómo participar (1 paso por línea)
+                  <textarea
+                    rows={3}
+                    value={settings.howToJoinText}
+                    onChange={(event) => setSettings({ ...settings, howToJoinText: event.target.value })}
+                  />
+                </label>
+                <label className="request-full">
+                  FAQ (formato: Pregunta | Respuesta)
+                  <textarea
+                    rows={4}
+                    value={settings.faqText}
+                    onChange={(event) => setSettings({ ...settings, faqText: event.target.value })}
+                    placeholder={"¿Cómo participo? | Selecciona tu número y completa el pago.\n¿Cuándo anuncian ganador? | En la fecha del countdown."}
+                  />
+                </label>
+              </div>
+              <div className="card" style={{ marginBottom: "12px" }}>
+                <div className="table-head-row">
+                  <div>
+                    <h4>Métodos de pago por rifa</h4>
+                    <p className="muted">Configura método, reglas y enlaces clickeables por sorteo.</p>
+                  </div>
+                  <button className="button-outline" type="button" onClick={addCustomPaymentMethod}>
+                    Agregar método
+                  </button>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>On</th>
+                        <th>Label</th>
+                        <th>Provider</th>
+                        <th>Destino</th>
+                        <th>Link de pago</th>
+                        <th>Instrucciones</th>
+                        <th>Orden</th>
+                        <th>Ref</th>
+                        <th>Shot</th>
+                        <th>Auto</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {settings.paymentMethods.map((method, index) => (
+                        <tr key={`${method.provider}-${index}`}>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(method.enabled)}
+                              onChange={(event) => updatePaymentMethodAt(index, { enabled: event.target.checked })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              value={method.label}
+                              onChange={(event) => updatePaymentMethodAt(index, { label: event.target.value })}
+                              placeholder="Ej: PayPal"
+                            />
+                          </td>
+                          <td>
+                            <input
+                              value={method.provider}
+                              onChange={(event) => updatePaymentMethodAt(index, { provider: event.target.value })}
+                              placeholder="paypal"
+                            />
+                          </td>
+                          <td>
+                            <input
+                              value={method.destinationValue ?? ""}
+                              onChange={(event) => updatePaymentMethodAt(index, { destinationValue: event.target.value })}
+                              placeholder="email, @tag, teléfono"
+                            />
+                          </td>
+                          <td>
+                            <input
+                              value={method.href ?? ""}
+                              onChange={(event) => updatePaymentMethodAt(index, { href: event.target.value })}
+                              placeholder="https://..."
+                            />
+                          </td>
+                          <td>
+                            <input
+                              value={method.instructions ?? ""}
+                              onChange={(event) => updatePaymentMethodAt(index, { instructions: event.target.value })}
+                              placeholder="Instrucciones visibles"
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              min={0}
+                              value={method.displayOrder}
+                              onChange={(event) => updatePaymentMethodAt(index, { displayOrder: Number(event.target.value || 0) })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(method.requiresReference)}
+                              onChange={(event) => updatePaymentMethodAt(index, { requiresReference: event.target.checked })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(method.requiresScreenshot)}
+                              onChange={(event) => updatePaymentMethodAt(index, { requiresScreenshot: event.target.checked })}
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={Boolean(method.isAutomatic)}
+                              onChange={(event) => updatePaymentMethodAt(index, { isAutomatic: event.target.checked })}
+                            />
+                          </td>
+                          <td>
+                            <button className="button-outline" type="button" onClick={() => removePaymentMethod(index)}>
+                              Quitar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
               <button className="button-dark" type="button" onClick={() => void saveVisibilitySettings()}>
                 Guardar ajustes

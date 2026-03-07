@@ -16,8 +16,20 @@ function iconTextForKey(key: string) {
       return "$";
     case "zelle":
       return "Z";
+    case "ath_movil":
+      return "ATH";
     case "venmo":
       return "V";
+    case "apple_pay":
+      return "AP";
+    case "google_pay":
+      return "GP";
+    case "bank_transfer":
+      return "BT";
+    case "athmovil":
+      return "ATH";
+    case "zellepay":
+      return "Z";
     case "stripe":
       return "S";
     default:
@@ -33,8 +45,20 @@ function classForKey(key: string) {
       return "payment-icon cashapp";
     case "zelle":
       return "payment-icon zelle";
+    case "ath_movil":
+      return "payment-icon athmovil";
     case "venmo":
       return "payment-icon venmo";
+    case "apple_pay":
+      return "payment-icon applepay";
+    case "google_pay":
+      return "payment-icon googlepay";
+    case "bank_transfer":
+      return "payment-icon banktransfer";
+    case "athmovil":
+      return "payment-icon athmovil";
+    case "zellepay":
+      return "payment-icon zelle";
     case "stripe":
       return "payment-icon stripe";
     default:

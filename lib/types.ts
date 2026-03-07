@@ -269,6 +269,31 @@ export type RaffleNumberStatus =
   | "winner";
 export type RaffleEntrySource = "online" | "offline" | "admin_manual";
 export type RaffleManualPaymentMethod = "paypal" | "zelle" | "cashapp" | "ath_movil" | "cash" | "venmo" | "other";
+export interface RaffleFaqItem {
+  question: string;
+  answer: string;
+}
+
+export interface RafflePaymentMethodConfig {
+  provider: string;
+  enabled: boolean;
+  label: string;
+  instructions?: string;
+  destinationValue?: string;
+  href?: string;
+  displayOrder?: number;
+  requiresReference?: boolean;
+  requiresScreenshot?: boolean;
+  isAutomatic?: boolean;
+  config?: Record<string, unknown>;
+}
+
+export interface RafflePaymentLink {
+  key: string;
+  label: string;
+  href: string;
+  active: boolean;
+}
 
 export interface Raffle {
   id: string;
@@ -305,11 +330,20 @@ export interface Raffle {
   secretCommitHash?: string;
   drawAlgorithm?: RaffleDrawAlgorithm;
   drawPayloadJson?: Record<string, unknown>;
+  publicSubtitle?: string;
+  publicCtaLabel?: string;
+  promoBadges?: string[];
+  faqItems?: RaffleFaqItem[];
+  prizeIncludes?: string[];
+  howToJoinItems?: string[];
+  paymentMethods?: RafflePaymentMethodConfig[];
   referralEnabled?: boolean;
   viralCounterEnabled?: boolean;
   urgencyMessage?: string;
   publicActivityEnabled?: boolean;
   liveDrawEnabled?: boolean;
+  paymentLinks?: RafflePaymentLink[];
+  paymentLinksNote?: string;
   updatedAt?: string;
   createdAt: string;
 }
@@ -327,6 +361,7 @@ export interface RaffleEntry {
   publicDisplayName?: string;
   consentPublicListing?: boolean;
   paymentMethod?: string;
+  paymentScreenshotUrl?: string;
   phone?: string;
   referralCode?: string;
   referredByCode?: string;

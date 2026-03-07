@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { GenericSectionsRenderer } from "@/components/cms/generic-sections";
 import { getCmsPageBundleService } from "@/lib/cms-service";
 import { formatMoney } from "@/lib/format";
+import { toPublicImageSrc } from "@/lib/image-url";
 import { listRafflesService } from "@/lib/raffles-service";
 
 export const dynamic = "force-dynamic";
@@ -43,13 +45,22 @@ export default async function SorteosPage() {
       <section className="stack-grid">
         {raffles.map((raffle) => (
           <article key={raffle.id} className="card">
+            <div style={{ position: "relative", height: "220px", borderRadius: "14px", overflow: "hidden", marginBottom: "14px" }}>
+              <Image
+                src={toPublicImageSrc(raffle.imageUrl, "/logo.png")}
+                alt={raffle.title}
+                fill
+                sizes="(max-width: 768px) 100vw, 50vw"
+                style={{ objectFit: "cover" }}
+              />
+            </div>
             <div className="table-head-row">
               <div>
                 <h3>{raffle.title}</h3>
                 <p className="muted">{raffle.description}</p>
               </div>
               <div className="right-info">
-                <p>{raffle.isFree ? "Gratis" : "Pago"}</p>
+                <p className="chip">{raffle.status === "published" ? "Activo" : "Cerrado"}</p>
                 <p>{raffle.isFree ? "Entrada libre" : `Entrada ${formatMoney(raffle.entryFee)}`}</p>
               </div>
             </div>

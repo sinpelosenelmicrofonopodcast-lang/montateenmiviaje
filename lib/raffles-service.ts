@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { hasSupabaseConfig, getSupabaseAdminClient } from "@/lib/supabase-admin";
 import {
   Customer,
+  RaffleFaqItem,
   PublicRaffleParticipant,
   Raffle,
   RaffleDrawAlgorithm,
@@ -12,6 +13,8 @@ import {
   RaffleNumber,
   RaffleNumberGridMode,
   RaffleNumberStatus,
+  RafflePaymentMethodConfig,
+  RafflePaymentLink,
   RafflePayment,
   RaffleParticipantsMode,
   RaffleVerificationMode
@@ -53,11 +56,20 @@ export interface CreateRaffleInput {
   publicWinnerName?: boolean;
   verificationMode?: RaffleVerificationMode;
   publicSeed?: string;
+  publicSubtitle?: string;
+  publicCtaLabel?: string;
+  promoBadges?: string[];
+  faqItems?: RaffleFaqItem[];
+  prizeIncludes?: string[];
+  howToJoinItems?: string[];
+  paymentMethods?: RafflePaymentMethodConfig[];
   referralEnabled?: boolean;
   viralCounterEnabled?: boolean;
   urgencyMessage?: string;
   publicActivityEnabled?: boolean;
   liveDrawEnabled?: boolean;
+  paymentLinks?: RafflePaymentLink[];
+  paymentLinksNote?: string;
 }
 
 export interface DrawRaffleWinnerResult {
@@ -232,6 +244,7 @@ interface AppRaffleEntryRow {
   public_display_name?: string | null;
   consent_public_listing?: boolean | null;
   payment_method?: string | null;
+  payment_screenshot_url?: string | null;
   phone?: string | null;
   referral_code?: string | null;
   referred_by_code?: string | null;
@@ -308,6 +321,10 @@ function mapCustomer(row: AppCustomerRow): Customer {
 }
 
 function mapRaffle(row: AppRaffleRow): Raffle {
+  const drawPayload = row.draw_payload_json ?? {};
+  const paymentLinksData = parseRafflePaymentLinksFromPayload(drawPayload);
+  const contentConfig = parseRaffleContentConfig(drawPayload);
+  const paymentMethods = parseRafflePaymentMethodsFromPayload(drawPayload, row.payment_instructions);
   return {
     id: row.id,
     title: row.title,
@@ -342,12 +359,21 @@ function mapRaffle(row: AppRaffleRow): Raffle {
     publicSeed: row.public_seed ?? undefined,
     secretCommitHash: row.secret_commit_hash ?? undefined,
     drawAlgorithm: row.draw_algorithm ?? "sha256-modulo-v1",
-    drawPayloadJson: row.draw_payload_json ?? {},
+    drawPayloadJson: drawPayload,
+    publicSubtitle: contentConfig.publicSubtitle,
+    publicCtaLabel: contentConfig.publicCtaLabel,
+    promoBadges: contentConfig.promoBadges,
+    faqItems: contentConfig.faqItems,
+    prizeIncludes: contentConfig.prizeIncludes,
+    howToJoinItems: contentConfig.howToJoinItems,
+    paymentMethods,
     referralEnabled: row.referral_enabled ?? true,
     viralCounterEnabled: row.viral_counter_enabled ?? true,
     urgencyMessage: row.urgency_message ?? undefined,
     publicActivityEnabled: row.public_activity_enabled ?? true,
     liveDrawEnabled: row.live_draw_enabled ?? true,
+    paymentLinks: paymentLinksData.paymentLinks.length > 0 ? paymentLinksData.paymentLinks : paymentMethodsToLinks(paymentMethods),
+    paymentLinksNote: paymentLinksData.paymentLinksNote,
     updatedAt: row.updated_at ?? undefined,
     createdAt: row.created_at
   };
@@ -367,6 +393,7 @@ function mapRaffleEntry(row: AppRaffleEntryRow): RaffleEntry {
     publicDisplayName: row.public_display_name ?? undefined,
     consentPublicListing: row.consent_public_listing ?? false,
     paymentMethod: row.payment_method ?? undefined,
+    paymentScreenshotUrl: row.payment_screenshot_url ?? undefined,
     phone: row.phone ?? undefined,
     referralCode: row.referral_code ?? undefined,
     referredByCode: row.referred_by_code ?? undefined,
@@ -479,6 +506,207 @@ function ensurePaymentMethod(method: string | undefined): RaffleManualPaymentMet
     return method as RaffleManualPaymentMethod;
   }
   return "other";
+}
+
+function normalizePaymentHref(value: string) {
+  const href = value.trim();
+  if (!href) return "";
+  if (href.startsWith("paypal.me/")) return `https://${href}`;
+  if (href.startsWith("cash.app/")) return `https://${href}`;
+  if (href.startsWith("$")) return `https://cash.app/${href}`;
+  if (href.startsWith("www.")) return `https://${href}`;
+  return href;
+}
+
+function asNonEmptyString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function sanitizeStringList(value: unknown) {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .map((item) => asNonEmptyString(item))
+    .filter(Boolean);
+}
+
+function sanitizeFaqItems(value: unknown): RaffleFaqItem[] {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .map((item) => (item && typeof item === "object" ? (item as Record<string, unknown>) : null))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .map((item) => {
+      const question = asNonEmptyString(item.question);
+      const answer = asNonEmptyString(item.answer);
+      if (!question || !answer) return null;
+      return { question, answer } as RaffleFaqItem;
+    })
+    .filter((item): item is RaffleFaqItem => Boolean(item));
+}
+
+function methodHrefFromProvider(provider: string, href: string, destination: string) {
+  if (href) {
+    return normalizePaymentHref(href);
+  }
+
+  if (!destination) {
+    return "";
+  }
+
+  if (provider === "paypal") {
+    const paypalHref = destination.includes("/") ? destination : `paypal.me/${destination.replace(/^@/, "")}`;
+    return normalizePaymentHref(paypalHref);
+  }
+
+  if (provider === "cashapp") {
+    const cashTag = destination.startsWith("$") ? destination : `$${destination.replace(/^@/, "")}`;
+    return normalizePaymentHref(cashTag);
+  }
+
+  if (provider === "zelle" && destination.includes("@")) {
+    return `mailto:${destination}`;
+  }
+
+  return "";
+}
+
+function sanitizeRafflePaymentMethods(value: unknown): RafflePaymentMethodConfig[] {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .map((item) => (item && typeof item === "object" ? (item as Record<string, unknown>) : null))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .map((item, index) => {
+      const provider = asNonEmptyString(item.provider || item.key).toLowerCase();
+      const label = asNonEmptyString(item.label) || provider;
+      const destinationValue = asNonEmptyString(item.destinationValue ?? item.destination_value);
+      const href = methodHrefFromProvider(provider, asNonEmptyString(item.href), destinationValue);
+      const instructions = asNonEmptyString(item.instructions);
+      const displayOrder = Number.isFinite(Number(item.displayOrder ?? item.display_order))
+        ? Number(item.displayOrder ?? item.display_order)
+        : index;
+      const enabled = typeof item.enabled === "boolean" ? item.enabled : true;
+      const requiresReference = typeof item.requiresReference === "boolean"
+        ? item.requiresReference
+        : typeof item.requires_reference === "boolean"
+          ? Boolean(item.requires_reference)
+          : false;
+      const requiresScreenshot = typeof item.requiresScreenshot === "boolean"
+        ? item.requiresScreenshot
+        : typeof item.requires_screenshot === "boolean"
+          ? Boolean(item.requires_screenshot)
+          : false;
+      const isAutomatic = typeof item.isAutomatic === "boolean"
+        ? item.isAutomatic
+        : typeof item.is_automatic === "boolean"
+          ? Boolean(item.is_automatic)
+          : provider === "stripe";
+      const config =
+        item.config && typeof item.config === "object"
+          ? (item.config as Record<string, unknown>)
+          : undefined;
+
+      if (!provider || !label) {
+        return null;
+      }
+
+      return {
+        provider,
+        enabled,
+        label,
+        instructions: instructions || undefined,
+        destinationValue: destinationValue || undefined,
+        href: href || undefined,
+        displayOrder,
+        requiresReference,
+        requiresScreenshot,
+        isAutomatic,
+        config
+      } as RafflePaymentMethodConfig;
+    })
+    .filter((item): item is RafflePaymentMethodConfig => Boolean(item))
+    .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
+}
+
+function paymentMethodsToLinks(methods: RafflePaymentMethodConfig[]): RafflePaymentLink[] {
+  return methods
+    .filter((method) => method.enabled && method.href)
+    .map((method) => ({
+      key: method.provider,
+      label: method.label,
+      href: method.href!,
+      active: true
+    }));
+}
+
+function sanitizeRafflePaymentLinks(value: unknown): RafflePaymentLink[] {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .map((item) => (item && typeof item === "object" ? (item as Record<string, unknown>) : null))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .map((item) => {
+      const key = typeof item.key === "string" ? item.key.trim().toLowerCase() : "";
+      const label = typeof item.label === "string" && item.label.trim() ? item.label.trim() : key;
+      const hrefRaw =
+        typeof item.href === "string" ? item.href : typeof item.url === "string" ? item.url : "";
+      const href = normalizePaymentHref(hrefRaw);
+      const active = typeof item.active === "boolean" ? item.active : true;
+
+      if (!key || !label || !href || !active) {
+        return null;
+      }
+
+      if (!/^https?:\/\//i.test(href) && !/^mailto:/i.test(href) && !/^tel:/i.test(href)) {
+        return null;
+      }
+
+      return { key, label, href, active } as RafflePaymentLink;
+    })
+    .filter((item): item is RafflePaymentLink => Boolean(item));
+}
+
+function parseRafflePaymentLinksFromPayload(payload: Record<string, unknown> | null | undefined) {
+  const paymentLinks = sanitizeRafflePaymentLinks(payload?.payment_links);
+  const paymentLinksNote =
+    typeof payload?.payment_links_note === "string" && payload.payment_links_note.trim()
+      ? payload.payment_links_note.trim()
+      : undefined;
+
+  return { paymentLinks, paymentLinksNote };
+}
+
+function parseRafflePaymentMethodsFromPayload(
+  payload: Record<string, unknown> | null | undefined,
+  paymentInstructions: string
+) {
+  const methodsFromPayload = sanitizeRafflePaymentMethods(payload?.payment_methods);
+  if (methodsFromPayload.length > 0) {
+    return methodsFromPayload;
+  }
+
+  const links = sanitizeRafflePaymentLinks(payload?.payment_links);
+  return links.map((item, index) => ({
+    provider: item.key,
+    enabled: item.active,
+    label: item.label,
+    href: item.href,
+    instructions: paymentInstructions || undefined,
+    destinationValue: undefined,
+    displayOrder: index,
+    requiresReference: false,
+    requiresScreenshot: false,
+    isAutomatic: item.key === "stripe",
+    config: undefined
+  }));
+}
+
+function parseRaffleContentConfig(payload: Record<string, unknown> | null | undefined) {
+  return {
+    publicSubtitle: asNonEmptyString(payload?.public_subtitle) || undefined,
+    publicCtaLabel: asNonEmptyString(payload?.public_cta_label) || undefined,
+    promoBadges: sanitizeStringList(payload?.promo_badges),
+    faqItems: sanitizeFaqItems(payload?.faq_items),
+    prizeIncludes: sanitizeStringList(payload?.prize_includes),
+    howToJoinItems: sanitizeStringList(payload?.how_to_join_items)
+  };
 }
 
 function toReferralCode(email: string) {
@@ -727,7 +955,7 @@ async function drawRaffleWinnerSupabase(
 
   let winnerEntry: AppRaffleEntryRow | null = null;
   let winnerNumber: number | null = null;
-  let drawPayloadJson: Record<string, unknown> = {};
+  let drawPayloadJson: Record<string, unknown> = { ...(raffle.draw_payload_json ?? {}) };
 
   if (eligibleNumbers.length > 0) {
     const previousPayload = raffle.draw_payload_json ?? {};
@@ -760,6 +988,7 @@ async function drawRaffleWinnerSupabase(
     }
 
     drawPayloadJson = {
+      ...previousPayload,
       verification_mode: raffle.verification_mode ?? "commit_reveal",
       algorithm: raffle.draw_algorithm ?? "sha256-modulo-v1",
       public_seed: publicSeed,
@@ -1050,6 +1279,51 @@ export async function createRaffleService(input: CreateRaffleInput) {
   const publicSeed = input.publicSeed ?? randomUUID().replace(/-/g, "").slice(0, 24);
   const revealSecret = randomUUID().replace(/-/g, "").slice(0, 32);
   const secretCommitHash = hashSha256(`${publicSeed}:${revealSecret}`);
+  const sanitizedPaymentMethods = sanitizeRafflePaymentMethods(input.paymentMethods);
+  const normalizedPaymentLinks = sanitizeRafflePaymentLinks(input.paymentLinks);
+  const paymentLinks = sanitizeRafflePaymentLinks(input.paymentLinks);
+  const paymentLinksNote = typeof input.paymentLinksNote === "string" && input.paymentLinksNote.trim()
+    ? input.paymentLinksNote.trim()
+    : null;
+  const promoBadges = sanitizeStringList(input.promoBadges);
+  const faqItems = sanitizeFaqItems(input.faqItems);
+  const prizeIncludes = sanitizeStringList(input.prizeIncludes);
+  const howToJoinItems = sanitizeStringList(input.howToJoinItems);
+  const drawPayloadJson: Record<string, unknown> =
+    verificationMode === "commit_reveal"
+      ? { commit_hash: secretCommitHash, reveal_secret: revealSecret, prepared_at: now, public_seed: publicSeed }
+      : {};
+  if (typeof input.publicSubtitle === "string" && input.publicSubtitle.trim()) {
+    drawPayloadJson.public_subtitle = input.publicSubtitle.trim();
+  }
+  if (typeof input.publicCtaLabel === "string" && input.publicCtaLabel.trim()) {
+    drawPayloadJson.public_cta_label = input.publicCtaLabel.trim();
+  }
+  if (promoBadges.length > 0) {
+    drawPayloadJson.promo_badges = promoBadges;
+  }
+  if (faqItems.length > 0) {
+    drawPayloadJson.faq_items = faqItems;
+  }
+  if (prizeIncludes.length > 0) {
+    drawPayloadJson.prize_includes = prizeIncludes;
+  }
+  if (howToJoinItems.length > 0) {
+    drawPayloadJson.how_to_join_items = howToJoinItems;
+  }
+  if (sanitizedPaymentMethods.length > 0) {
+    drawPayloadJson.payment_methods = sanitizedPaymentMethods;
+  }
+  if (paymentLinks.length > 0) {
+    drawPayloadJson.payment_links = paymentLinks;
+  } else if (sanitizedPaymentMethods.length > 0) {
+    drawPayloadJson.payment_links = paymentMethodsToLinks(sanitizedPaymentMethods);
+  } else if (normalizedPaymentLinks.length > 0) {
+    drawPayloadJson.payment_links = normalizedPaymentLinks;
+  }
+  if (paymentLinksNote) {
+    drawPayloadJson.payment_links_note = paymentLinksNote;
+  }
 
   const result = await supabase
     .from("app_raffles")
@@ -1058,7 +1332,7 @@ export async function createRaffleService(input: CreateRaffleInput) {
       description: input.description,
       rules_text: input.rulesText ?? input.requirements,
       image_url: input.imageUrl ?? null,
-      cta_label: input.ctaLabel ?? null,
+      cta_label: input.publicCtaLabel ?? input.ctaLabel ?? null,
       cta_href: input.ctaHref ?? null,
       is_free: input.isFree,
       entry_fee: input.isFree ? 0 : input.entryFee,
@@ -1082,9 +1356,7 @@ export async function createRaffleService(input: CreateRaffleInput) {
       public_seed: verificationMode === "commit_reveal" ? publicSeed : null,
       secret_commit_hash: verificationMode === "commit_reveal" ? secretCommitHash : null,
       draw_algorithm: "sha256-modulo-v1",
-      draw_payload_json: verificationMode === "commit_reveal"
-        ? { commit_hash: secretCommitHash, reveal_secret: revealSecret, prepared_at: now, public_seed: publicSeed }
-        : {},
+      draw_payload_json: drawPayloadJson,
       referral_enabled: input.referralEnabled ?? true,
       viral_counter_enabled: input.viralCounterEnabled ?? true,
       urgency_message: input.urgencyMessage ?? null,
@@ -1123,6 +1395,7 @@ export async function enterRaffleService(
     publicDisplayName?: string;
     consentPublicListing?: boolean;
     paymentMethod?: string;
+    paymentScreenshotUrl?: string;
     phone?: string;
   }
 ) {
@@ -1197,14 +1470,38 @@ export async function enterRaffleService(
     throw new Error("Ese número ya no está disponible");
   }
 
+  const raffleModel = mapRaffle(raffle);
+  const configuredMethods = (raffleModel.paymentMethods ?? []).filter((method) => method.enabled);
+  const requestedPaymentMethod = options?.paymentMethod?.trim().toLowerCase();
+  const selectedMethodConfig = requestedPaymentMethod
+    ? configuredMethods.find((method) => method.provider === requestedPaymentMethod)
+    : configuredMethods[0];
+
+  if (!raffle.is_free && configuredMethods.length > 0 && !selectedMethodConfig) {
+    throw new Error("Método de pago inválido para este sorteo");
+  }
+
+  const normalizedPaymentReference = paymentReference?.trim() || undefined;
+  const normalizedScreenshotUrl = options?.paymentScreenshotUrl?.trim() || undefined;
+
+  if (!raffle.is_free && selectedMethodConfig?.requiresReference && !normalizedPaymentReference) {
+    throw new Error("Este método de pago requiere referencia.");
+  }
+
+  if (!raffle.is_free && selectedMethodConfig?.requiresScreenshot && !normalizedScreenshotUrl) {
+    throw new Error("Este método de pago requiere screenshot/comprobante.");
+  }
+
+  const finalPaymentMethod = selectedMethodConfig?.provider ?? requestedPaymentMethod ?? "other";
+
   const status: RaffleEntryStatus = raffle.is_free
     ? "confirmed"
-    : paymentReference
+    : normalizedPaymentReference || normalizedScreenshotUrl
       ? "pending_review"
       : "pending_payment";
 
   const referralCode = toReferralCode(customer.data.email);
-  const paymentMethod = options?.paymentMethod?.trim();
+  const paymentMethod = finalPaymentMethod;
 
   const insert = await supabase
     .from("app_raffle_entries")
@@ -1213,7 +1510,7 @@ export async function enterRaffleService(
       customer_id: customer.data.id,
       customer_email: customer.data.email,
       chosen_number: chosenNumber,
-      payment_reference: paymentReference ?? null,
+      payment_reference: normalizedPaymentReference ?? null,
       note: note ?? null,
       status,
       source: "online",
@@ -1237,6 +1534,33 @@ export async function enterRaffleService(
   }
 
   await syncNumberForEntry(insert.data, { paymentMethod, actorId: undefined });
+
+  if (!raffle.is_free) {
+    const normalizedMethodForPayments = ensurePaymentMethod(paymentMethod);
+    const paymentInsert = await supabase.from("app_raffle_payments").insert({
+      raffle_id: raffle.id,
+      entry_id: insert.data.id,
+      customer_id: customer.data.id,
+      customer_email: customer.data.email,
+      amount: Number(raffle.entry_fee),
+      currency: "USD",
+      payment_method: normalizedMethodForPayments,
+      payment_reference: normalizedPaymentReference ?? null,
+      screenshot_url: normalizedScreenshotUrl ?? null,
+      is_manual: selectedMethodConfig ? !selectedMethodConfig.isAutomatic : true,
+      manually_verified: false,
+      status: "pending",
+      admin_note: selectedMethodConfig && normalizedMethodForPayments !== selectedMethodConfig.provider
+        ? `provider:${selectedMethodConfig.provider}`
+        : null,
+      created_by: null,
+      updated_at: new Date().toISOString()
+    });
+
+    if (paymentInsert.error) {
+      console.error("No se pudo crear pago pendiente de rifa", paymentInsert.error.message);
+    }
+  }
 
   if (options?.referredByCode?.trim()) {
     const conversionEvent = await supabase.from("app_raffle_referral_events").insert({
@@ -1364,6 +1688,7 @@ export async function updateRaffleService(
   if (typeof input.rulesText === "string") payload.rules_text = input.rulesText.trim();
   if (typeof input.imageUrl === "string") payload.image_url = input.imageUrl.trim() || null;
   if (typeof input.ctaLabel === "string") payload.cta_label = input.ctaLabel.trim() || null;
+  if (typeof input.publicCtaLabel === "string") payload.cta_label = input.publicCtaLabel.trim() || null;
   if (typeof input.ctaHref === "string") payload.cta_href = input.ctaHref.trim() || null;
   if (typeof input.isFree === "boolean") payload.is_free = input.isFree;
   if (typeof input.entryFee === "number") payload.entry_fee = input.entryFee;
@@ -1392,6 +1717,109 @@ export async function updateRaffleService(
   if (typeof input.liveDrawEnabled === "boolean") payload.live_draw_enabled = input.liveDrawEnabled;
 
   const current = await getRaffleRowOrThrow(raffleId);
+  const nextDrawPayload = { ...(current.draw_payload_json ?? {}) } as Record<string, unknown>;
+  let shouldUpdateDrawPayload = false;
+
+  if (Object.prototype.hasOwnProperty.call(input, "publicSubtitle")) {
+    const subtitle = typeof input.publicSubtitle === "string" ? input.publicSubtitle.trim() : "";
+    if (subtitle) {
+      nextDrawPayload.public_subtitle = subtitle;
+    } else {
+      delete nextDrawPayload.public_subtitle;
+    }
+    shouldUpdateDrawPayload = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "publicCtaLabel")) {
+    const ctaLabel = typeof input.publicCtaLabel === "string" ? input.publicCtaLabel.trim() : "";
+    if (ctaLabel) {
+      nextDrawPayload.public_cta_label = ctaLabel;
+    } else {
+      delete nextDrawPayload.public_cta_label;
+    }
+    shouldUpdateDrawPayload = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "promoBadges")) {
+    const badges = sanitizeStringList(input.promoBadges);
+    if (badges.length > 0) {
+      nextDrawPayload.promo_badges = badges;
+    } else {
+      delete nextDrawPayload.promo_badges;
+    }
+    shouldUpdateDrawPayload = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "faqItems")) {
+    const faqItems = sanitizeFaqItems(input.faqItems);
+    if (faqItems.length > 0) {
+      nextDrawPayload.faq_items = faqItems;
+    } else {
+      delete nextDrawPayload.faq_items;
+    }
+    shouldUpdateDrawPayload = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "prizeIncludes")) {
+    const prizeIncludes = sanitizeStringList(input.prizeIncludes);
+    if (prizeIncludes.length > 0) {
+      nextDrawPayload.prize_includes = prizeIncludes;
+    } else {
+      delete nextDrawPayload.prize_includes;
+    }
+    shouldUpdateDrawPayload = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "howToJoinItems")) {
+    const howToJoinItems = sanitizeStringList(input.howToJoinItems);
+    if (howToJoinItems.length > 0) {
+      nextDrawPayload.how_to_join_items = howToJoinItems;
+    } else {
+      delete nextDrawPayload.how_to_join_items;
+    }
+    shouldUpdateDrawPayload = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "paymentMethods")) {
+    const paymentMethods = sanitizeRafflePaymentMethods(input.paymentMethods);
+    if (paymentMethods.length > 0) {
+      nextDrawPayload.payment_methods = paymentMethods;
+      nextDrawPayload.payment_links = paymentMethodsToLinks(paymentMethods);
+    } else {
+      delete nextDrawPayload.payment_methods;
+      if (!Object.prototype.hasOwnProperty.call(input, "paymentLinks")) {
+        delete nextDrawPayload.payment_links;
+      }
+    }
+    shouldUpdateDrawPayload = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "paymentLinks")) {
+    const paymentLinks = sanitizeRafflePaymentLinks(input.paymentLinks);
+    if (paymentLinks.length > 0) {
+      nextDrawPayload.payment_links = paymentLinks;
+    } else {
+      delete nextDrawPayload.payment_links;
+    }
+    shouldUpdateDrawPayload = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(input, "paymentLinksNote")) {
+    const note = typeof input.paymentLinksNote === "string" && input.paymentLinksNote.trim()
+      ? input.paymentLinksNote.trim()
+      : "";
+    if (note) {
+      nextDrawPayload.payment_links_note = note;
+    } else {
+      delete nextDrawPayload.payment_links_note;
+    }
+    shouldUpdateDrawPayload = true;
+  }
+
+  if (shouldUpdateDrawPayload) {
+    payload.draw_payload_json = nextDrawPayload;
+  }
+
   if (typeof input.numberPoolSize === "number") {
     if (!Number.isInteger(input.numberPoolSize) || input.numberPoolSize < 1) {
       throw new Error("numberPoolSize inválido");
