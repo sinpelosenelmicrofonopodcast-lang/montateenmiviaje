@@ -6,10 +6,11 @@ import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 import { GalleryAlbumBundle } from "@/lib/catalog-service";
 import { PageSection } from "@/lib/cms-service";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, getStartingPrice } from "@/lib/format";
 import { toPublicImageSrc } from "@/lib/image-url";
 import { Offer, Raffle, Testimonial, Trip } from "@/lib/types";
 import type { RafflePublicSummary } from "@/lib/raffles-service";
+import { TravelIcon, type TravelIconName } from "@/components/ui/travel-icons";
 import styles from "./home-sections.module.css";
 
 interface HomeSectionsProps {
@@ -87,6 +88,26 @@ function getTripUrgencyLabel(trip: Trip) {
   if (trip.availableSpots <= 3) return "Ultimos espacios";
   if (trip.availableSpots <= 8) return "Se esta llenando";
   return "Reservas abiertas";
+}
+
+function toTravelIconName(value: string, fallback: TravelIconName = "spark"): TravelIconName {
+  const icon = value.trim().toLowerCase() as TravelIconName;
+  const allowed: TravelIconName[] = [
+    "palm",
+    "luggage",
+    "plane",
+    "shield",
+    "wallet",
+    "map",
+    "spark",
+    "clock",
+    "users",
+    "document",
+    "message",
+    "bell"
+  ];
+
+  return allowed.includes(icon) ? icon : fallback;
 }
 
 function formatCount(value: number) {
@@ -238,36 +259,95 @@ export function HomeSectionsRenderer({
       ? benefitItems.map((item) => ({
           title: asString(item.title),
           description: asString(item.description),
-          icon: asString(item.icon) || "spark"
+          icon: toTravelIconName(asString(item.icon), "spark")
         }))
       : [
           {
             title: "No pierdas tiempo planeando solo",
             description: "Consolidamos vuelo, hotel y experiencia para que reserves con claridad.",
-            icon: "route"
+            icon: "map" as TravelIconName
           },
           {
             title: "Reserva con deposito y paga por fases",
             description: "Estructura de pago flexible y acompanamiento en cada etapa.",
-            icon: "wallet"
+            icon: "wallet" as TravelIconName
           },
           {
             title: "Todo centralizado en un solo lugar",
             description: "Itinerarios, documentos y pagos disponibles desde tu portal.",
-            icon: "documents"
+            icon: "document" as TravelIconName
           },
           {
             title: "Soporte humano por WhatsApp",
             description: "Equipo concierge antes, durante y despues del viaje.",
-            icon: "support"
+            icon: "message" as TravelIconName
           }
         ];
 
   const trustPills = [
-    { title: "Pagos flexibles", description: "Reserva con deposito y completa en cuotas" },
-    { title: "Soporte por WhatsApp", description: "Acompanamiento antes y durante tu viaje" },
-    { title: "Itinerarios profesionales", description: "Documentacion clara y organizada" },
-    { title: "Viajes curados", description: "Destinos y experiencias seleccionadas" }
+    {
+      title: "Pagos flexibles",
+      description: "Reserva con deposito y completa en cuotas",
+      icon: "wallet" as TravelIconName
+    },
+    {
+      title: "Soporte por WhatsApp",
+      description: "Acompanamiento antes y durante tu viaje",
+      icon: "message" as TravelIconName
+    },
+    {
+      title: "Itinerarios profesionales",
+      description: "Documentacion clara y organizada",
+      icon: "document" as TravelIconName
+    },
+    {
+      title: "Viajes curados",
+      description: "Destinos y experiencias seleccionadas",
+      icon: "palm" as TravelIconName
+    }
+  ];
+
+  const howCards = (
+    howItems.length
+      ? howItems.map((item) => ({
+          title: asString(item.title),
+          description: asString(item.description),
+          icon: toTravelIconName(asString(item.icon), "spark")
+        }))
+      : [
+          {
+            title: "Escoge tu viaje",
+            description: "Explora destinos, fechas y categorias segun tu estilo.",
+            icon: "map" as TravelIconName
+          },
+          {
+            title: "Reserva con deposito",
+            description: "Asegura cupo y completa tu plan de pago con tranquilidad.",
+            icon: "wallet" as TravelIconName
+          },
+          {
+            title: "Recibe itinerario y soporte",
+            description: "Te entregamos documentos y seguimiento por WhatsApp.",
+            icon: "message" as TravelIconName
+          }
+        ]
+  ).slice(0, 3);
+
+  const utilityCards = [
+    {
+      title: "Invita y gana credito de viaje",
+      description: "Comparte tu enlace y activa recompensas para tu proxima aventura.",
+      href: "/portal/referidos",
+      cta: "Ver programa de referidos",
+      icon: "users" as TravelIconName
+    },
+    {
+      title: "Recibe alertas exclusivas",
+      description: "Enterate primero de salidas nuevas, ofertas premium y sorteos activos.",
+      href: "/registro",
+      cta: "Crear cuenta y activar alertas",
+      icon: "bell" as TravelIconName
+    }
   ];
 
   const finalCtaContent = asRecord(finalCtaSection?.content);
@@ -311,6 +391,12 @@ export function HomeSectionsRenderer({
                 backgroundImage: `linear-gradient(120deg, rgba(7, 14, 26, 0.8), rgba(11, 34, 50, 0.6), rgba(170, 96, 58, 0.5)), url('${heroBackground}')`
               }}
             />
+            <div className={styles.heroDecorLeft}>
+              <TravelIcon name="palm" className={styles.heroDecorIcon} />
+            </div>
+            <div className={styles.heroDecorRight}>
+              <TravelIcon name="luggage" className={styles.heroDecorIcon} />
+            </div>
 
             <div className={styles.heroContent}>
               <p className={`${styles.heroBadge} chip`}>
@@ -399,7 +485,12 @@ export function HomeSectionsRenderer({
           <Reveal className={styles.trustStrip}>
             {trustPills.map((item) => (
               <article key={item.title} className={styles.trustItem}>
-                <p className={styles.trustLabel}>{item.title}</p>
+                <div className={styles.trustHead}>
+                  <span className={styles.trustIconWrap}>
+                    <TravelIcon name={item.icon} className={styles.trustIcon} />
+                  </span>
+                  <p className={styles.trustLabel}>{item.title}</p>
+                </div>
                 <p className={styles.trustHint}>{item.description}</p>
               </article>
             ))}
@@ -421,6 +512,7 @@ export function HomeSectionsRenderer({
             <div className={styles.destinationGrid}>
               {destinationTrips.map((trip, index) => {
                 const fillPercent = getTripFillPercent(trip);
+                const startingPrice = getStartingPrice(trip.packages, trip.priceFrom);
                 return (
                   <Reveal key={trip.id} delay={index * 0.05}>
                     <Link href={`/viajes/${trip.slug}`} className={styles.destinationCard}>
@@ -435,6 +527,9 @@ export function HomeSectionsRenderer({
                           </span>
                           <span>{getTripUrgencyLabel(trip)}</span>
                         </div>
+                        <p className={styles.destinationPrice}>
+                          {startingPrice ? `Desde ${formatMoney(startingPrice)} p/p` : "Precio proximamente"}
+                        </p>
                         <div className={styles.progressMini}>
                           <div style={{ width: `${fillPercent}%` }} />
                         </div>
@@ -584,12 +679,14 @@ export function HomeSectionsRenderer({
               {fillingTrips.length > 0 ? (
                 fillingTrips.map((trip) => {
                   const sold = Math.max(trip.totalSpots - trip.availableSpots, 0);
+                  const startingPrice = getStartingPrice(trip.packages, trip.priceFrom);
                   return (
                     <article key={trip.id} className={styles.fillingItem}>
                       <div>
                         <p className={styles.fillingName}>{trip.title}</p>
                         <p className={styles.fillingHint}>
                           {sold} confirmados · {trip.availableSpots} espacios restantes
+                          {startingPrice ? ` · Desde ${formatMoney(startingPrice)}` : ""}
                         </p>
                       </div>
                       <Link href={`/viajes/${trip.slug}`}>Ver viaje</Link>
@@ -602,17 +699,21 @@ export function HomeSectionsRenderer({
 
               <h3 className={styles.sectionTitleInline}>Proximas salidas confirmadas</h3>
               {upcomingTrips.length > 0 ? (
-                upcomingTrips.map((trip) => (
-                  <article key={`${trip.id}-upcoming`} className={styles.fillingItem}>
-                    <div>
-                      <p className={styles.fillingName}>{trip.title}</p>
-                      <p className={styles.fillingHint}>
-                        {formatDate(trip.startDate)} · {trip.availableSpots} espacios disponibles
-                      </p>
-                    </div>
-                    <Link href={`/viajes/${trip.slug}`}>Reservar</Link>
-                  </article>
-                ))
+                upcomingTrips.map((trip) => {
+                  const startingPrice = getStartingPrice(trip.packages, trip.priceFrom);
+                  return (
+                    <article key={`${trip.id}-upcoming`} className={styles.fillingItem}>
+                      <div>
+                        <p className={styles.fillingName}>{trip.title}</p>
+                        <p className={styles.fillingHint}>
+                          {formatDate(trip.startDate)} · {trip.availableSpots} espacios disponibles
+                          {startingPrice ? ` · Desde ${formatMoney(startingPrice)}` : ""}
+                        </p>
+                      </div>
+                      <Link href={`/viajes/${trip.slug}`}>Reservar</Link>
+                    </article>
+                  );
+                })
               ) : (
                 <p className={styles.fillingHint}>Estamos cargando nuevas fechas para el proximo release.</p>
               )}
@@ -673,7 +774,9 @@ export function HomeSectionsRenderer({
             {benefitCards.slice(0, 4).map((item, index) => (
               <Reveal key={item.title} delay={index * 0.05}>
                 <article className={styles.benefitCard}>
-                  <div className={styles.benefitIcon} data-icon={item.icon} />
+                  <div className={styles.benefitIcon} data-icon={item.icon}>
+                    <TravelIcon name={item.icon} className={styles.benefitIconGlyph} />
+                  </div>
                   <h3>{item.title}</h3>
                   <p>{item.description}</p>
                 </article>
@@ -697,20 +800,15 @@ export function HomeSectionsRenderer({
           </Reveal>
 
           <div className={styles.howGrid}>
-            {(howItems.length
-              ? howItems.map((item) => ({
-                  title: asString(item.title),
-                  description: asString(item.description)
-                }))
-              : [
-                  { title: "Escoge tu viaje", description: "Explora destinos, fechas y categorias segun tu estilo." },
-                  { title: "Reserva con deposito", description: "Asegura cupo y completa tu plan de pago con tranquilidad." },
-                  { title: "Recibe itinerario y soporte", description: "Te entregamos documentos y seguimiento por WhatsApp." }
-                ]
-            ).map((item, index) => (
+            {howCards.map((item, index) => (
               <Reveal key={item.title} delay={index * 0.06}>
                 <article className={styles.howCard}>
-                  <p className={styles.howIndex}>0{index + 1}</p>
+                  <div className={styles.howHead}>
+                    <p className={styles.howIndex}>0{index + 1}</p>
+                    <span className={styles.howIconWrap}>
+                      <TravelIcon name={item.icon} className={styles.howIcon} />
+                    </span>
+                  </div>
                   <h3>{item.title}</h3>
                   <p>{item.description}</p>
                 </article>
@@ -756,16 +854,18 @@ export function HomeSectionsRenderer({
       <section className={styles.sectionBlock}>
         <div className="container">
           <Reveal className={styles.utilityBand}>
-            <article>
-              <h3>Invita y gana credito de viaje</h3>
-              <p>Comparte tu enlace y activa recompensas para tu proxima aventura.</p>
-              <Link href="/portal/referidos">Ver programa de referidos</Link>
-            </article>
-            <article>
-              <h3>Recibe alertas exclusivas</h3>
-              <p>Enterate primero de salidas nuevas, ofertas premium y sorteos activos.</p>
-              <Link href="/registro">Crear cuenta y activar alertas</Link>
-            </article>
+            {utilityCards.map((card) => (
+              <article key={card.title}>
+                <div className={styles.utilityTitleRow}>
+                  <span className={styles.utilityIconWrap}>
+                    <TravelIcon name={card.icon} className={styles.utilityIcon} />
+                  </span>
+                  <h3>{card.title}</h3>
+                </div>
+                <p>{card.description}</p>
+                <Link href={card.href}>{card.cta}</Link>
+              </article>
+            ))}
           </Reveal>
         </div>
       </section>

@@ -5,19 +5,67 @@ import { PDFFont, PDFDocument, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import { getTripBySlugService } from "@/lib/catalog-service";
 import { createDocumentRecordService } from "@/lib/runtime-service";
 
-function wrapLinesByWidth(text: string, font: PDFFont, size: number, maxWidth: number) {
-  const words = text.split(/\s+/);
+function normalizeTextForPdf(text: string) {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function wrapLinesByChars(text: string, maxChars: number) {
+  const words = normalizeTextForPdf(text).split(" ").filter(Boolean);
   const lines: string[] = [];
   let current = "";
 
   for (const word of words) {
     const candidate = current.length === 0 ? word : `${current} ${word}`;
-    const width = font.widthOfTextAtSize(candidate, size);
-    if (width > maxWidth && current.length > 0) {
+    if (candidate.length > maxChars && current.length > 0) {
       lines.push(current);
       current = word;
     } else {
       current = candidate;
+    }
+  }
+
+  if (current) {
+    lines.push(current);
+  }
+
+  return lines;
+}
+
+function wrapLinesByWidth(text: string, font: PDFFont, size: number, maxWidth: number) {
+  const words = normalizeTextForPdf(text).split(" ").filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const safeWord = (() => {
+      if (font.widthOfTextAtSize(word, size) <= maxWidth) {
+        return [word];
+      }
+
+      const parts: string[] = [];
+      let chunk = "";
+      for (const char of word) {
+        const candidate = `${chunk}${char}`;
+        if (font.widthOfTextAtSize(candidate, size) > maxWidth && chunk) {
+          parts.push(chunk);
+          chunk = char;
+        } else {
+          chunk = candidate;
+        }
+      }
+      if (chunk) parts.push(chunk);
+      return parts;
+    })();
+
+    for (const piece of safeWord) {
+      const candidate = current.length === 0 ? piece : `${current} ${piece}`;
+      const width = font.widthOfTextAtSize(candidate, size);
+      if (width > maxWidth && current.length > 0) {
+        lines.push(current);
+        current = piece;
+      } else {
+        current = candidate;
+      }
     }
   }
 
@@ -53,6 +101,68 @@ function drawParagraph(
   }
 
   return currentY;
+}
+
+function drawFittedHeading(
+  page: PDFPage,
+  text: string,
+  x: number,
+  y: number,
+  font: PDFFont,
+  maxWidth: number,
+  options?: { maxSize?: number; minSize?: number; maxLines?: number; color?: ReturnType<typeof rgb> }
+) {
+  const maxSize = options?.maxSize ?? 28;
+  const minSize = options?.minSize ?? 18;
+  const maxLines = options?.maxLines ?? 3;
+  const color = options?.color ?? rgb(0, 0, 0);
+  const hardMaxChars = 34;
+
+  let size = maxSize;
+  let lines = wrapLinesByWidth(text, font, size, maxWidth);
+  if (lines.length <= 1) {
+    lines = wrapLinesByChars(text, hardMaxChars);
+  }
+
+  while (
+    size > minSize &&
+    (lines.length > maxLines || lines.some((line) => font.widthOfTextAtSize(line, size) > maxWidth))
+  ) {
+    size -= 1;
+    lines = wrapLinesByWidth(text, font, size, maxWidth);
+    if (lines.length <= 1) {
+      lines = wrapLinesByChars(text, hardMaxChars);
+    }
+  }
+
+  while (size > 12 && lines.some((line) => font.widthOfTextAtSize(line, size) > maxWidth)) {
+    size -= 1;
+  }
+
+  if (lines.length > maxLines) {
+    lines = lines.slice(0, maxLines);
+    const last = lines[maxLines - 1];
+    lines[maxLines - 1] = last.length > 3 ? `${last.slice(0, Math.max(0, last.length - 3))}...` : `${last}...`;
+  }
+
+  const lineHeight = size + 5;
+  let cursorY = y;
+  for (const line of lines.slice(0, maxLines)) {
+    page.drawText(line, {
+      x,
+      y: cursorY,
+      size,
+      font,
+      color
+    });
+    cursorY -= lineHeight;
+  }
+
+  return {
+    size,
+    lines,
+    nextY: cursorY
+  };
 }
 
 export async function GET(
@@ -100,29 +210,34 @@ export async function GET(
     color: rgb(0.3, 0.3, 0.3)
   });
 
-  page.drawText(trip.title, {
-    x: 36,
-    y: 705,
-    size: 28,
-    font: titleFont,
+  const heading = drawFittedHeading(page, normalizeTextForPdf(trip.title), 36, 705, titleFont, 500, {
+    maxSize: 24,
+    minSize: 15,
+    maxLines: 4,
     color: rgb(0, 0, 0)
   });
+  const subtitleY = heading.nextY - 2;
 
-  page.drawText(`${trip.destination} · ${trip.startDate} - ${trip.endDate}`, {
-    x: 36,
-    y: 682,
-    size: 11,
-    font: bodyFont,
-    color: rgb(0.2, 0.2, 0.2)
-  });
+  const metaEndY =
+    drawParagraph(
+      page,
+      `${normalizeTextForPdf(trip.destination)} · ${trip.startDate} - ${trip.endDate}`,
+      36,
+      subtitleY,
+      bodyFont,
+      11,
+      523,
+      rgb(0.2, 0.2, 0.2)
+    ) - 2;
 
   const leftX = 36;
   const rightX = 320;
   const leftColWidth = 250;
   const rightColWidth = 235;
-  let y = 650;
+  const contentTopY = metaEndY - 20;
+  let y = contentTopY;
 
-  y = drawParagraph(page, trip.summary, leftX, y, bodyFont, 11, leftColWidth) - 10;
+  y = drawParagraph(page, normalizeTextForPdf(trip.summary), leftX, y, bodyFont, 11, leftColWidth) - 10;
 
   page.drawText(lang === "es" ? "Itinerario" : "Itinerary", {
     x: leftX,
@@ -135,7 +250,7 @@ export async function GET(
   y -= 20;
 
   for (const day of trip.itinerary) {
-    page.drawText(`${lang === "es" ? "Dia" : "Day"} ${day.dayNumber}: ${day.title}`, {
+    page.drawText(`${lang === "es" ? "Dia" : "Day"} ${day.dayNumber}: ${normalizeTextForPdf(day.title)}`, {
       x: leftX,
       y,
       size: 11,
@@ -143,7 +258,7 @@ export async function GET(
       color: rgb(0, 0, 0)
     });
     y -= 14;
-    y = drawParagraph(page, day.description, leftX, y, bodyFont, 10, leftColWidth) - 6;
+    y = drawParagraph(page, normalizeTextForPdf(day.description), leftX, y, bodyFont, 10, leftColWidth) - 6;
 
     if (y < 210) {
       break;
@@ -152,7 +267,7 @@ export async function GET(
 
   page.drawLine({
     start: { x: 300, y: 188 },
-    end: { x: 300, y: 658 },
+    end: { x: 300, y: Math.min(contentTopY + 8, 658) },
     thickness: 0.8,
     color: rgb(0.88, 0.88, 0.88)
   });
@@ -160,16 +275,20 @@ export async function GET(
   const includesTitle = lang === "es" ? "Incluye" : "Includes";
   const excludesTitle = lang === "es" ? "No incluye" : "Excludes";
 
-  page.drawText(includesTitle, { x: rightX, y: 650, size: 13, font: titleFont, color: rgb(0, 0, 0) });
-  let rightY = 632;
+  page.drawText(includesTitle, { x: rightX, y: contentTopY, size: 13, font: titleFont, color: rgb(0, 0, 0) });
+  let rightY = contentTopY - 18;
   for (const item of trip.includes.slice(0, 6)) {
-    rightY = drawParagraph(page, `- ${item}`, rightX, rightY, bodyFont, 10, rightColWidth, rgb(0.1, 0.1, 0.1)) - 2;
+    rightY =
+      drawParagraph(page, `- ${normalizeTextForPdf(item)}`, rightX, rightY, bodyFont, 10, rightColWidth, rgb(0.1, 0.1, 0.1)) -
+      2;
   }
 
   page.drawText(excludesTitle, { x: rightX, y: rightY - 8, size: 13, font: titleFont, color: rgb(0, 0, 0) });
   rightY -= 24;
   for (const item of trip.excludes.slice(0, 5)) {
-    rightY = drawParagraph(page, `- ${item}`, rightX, rightY, bodyFont, 10, rightColWidth, rgb(0.1, 0.1, 0.1)) - 2;
+    rightY =
+      drawParagraph(page, `- ${normalizeTextForPdf(item)}`, rightX, rightY, bodyFont, 10, rightColWidth, rgb(0.1, 0.1, 0.1)) -
+      2;
   }
 
   page.drawText(lang === "es" ? "Precio y plan" : "Pricing & plan", {
@@ -181,11 +300,17 @@ export async function GET(
   });
   rightY -= 24;
 
-  const basePackage = trip.packages[0];
-  if (showPrices && basePackage) {
+  const sortedPackages = [...trip.packages].sort((a, b) => a.pricePerPerson - b.pricePerPerson);
+  const basePackage = sortedPackages[0];
+  const effectivePriceFrom =
+    typeof trip.priceFrom === "number" && Number.isFinite(trip.priceFrom) && trip.priceFrom > 0
+      ? trip.priceFrom
+      : basePackage?.pricePerPerson;
+
+  if (showPrices && effectivePriceFrom) {
     rightY = drawParagraph(
       page,
-      `From USD ${basePackage.pricePerPerson}`,
+      `From USD ${Math.round(effectivePriceFrom)}`,
       rightX,
       rightY,
       bodyFont,
@@ -193,17 +318,21 @@ export async function GET(
       rightColWidth,
       rgb(0.1, 0.1, 0.1)
     ) - 2;
-    rightY = drawParagraph(
-      page,
-      `Deposit: USD ${basePackage.deposit}`,
-      rightX,
-      rightY,
-      bodyFont,
-      11,
-      rightColWidth,
-      rgb(0.1, 0.1, 0.1)
-    ) - 4;
-    rightY = drawParagraph(page, basePackage.paymentPlan, rightX, rightY, bodyFont, 10, rightColWidth, rgb(0.25, 0.25, 0.25)) - 8;
+    if (basePackage) {
+      rightY = drawParagraph(
+        page,
+        `Deposit: USD ${Math.round(basePackage.deposit)}`,
+        rightX,
+        rightY,
+        bodyFont,
+        11,
+        rightColWidth,
+        rgb(0.1, 0.1, 0.1)
+      ) - 4;
+      rightY =
+        drawParagraph(page, normalizeTextForPdf(basePackage.paymentPlan), rightX, rightY, bodyFont, 10, rightColWidth, rgb(0.25, 0.25, 0.25)) -
+        8;
+    }
   } else if (!basePackage) {
     rightY = drawParagraph(
       page,
@@ -265,8 +394,9 @@ export async function GET(
 
   let policyY = 142;
   for (const item of trip.policies.slice(0, 3)) {
-    page.drawText(`- ${item}`, { x: 48, y: policyY, size: 10, font: bodyFont, color: rgb(0.14, 0.14, 0.14) });
-    policyY -= 14;
+    policyY =
+      drawParagraph(page, `- ${normalizeTextForPdf(item)}`, 48, policyY, bodyFont, 10, 300, rgb(0.14, 0.14, 0.14)) -
+      2;
   }
 
   page.drawText(lang === "es" ? "Reserva" : "Reserve", {
@@ -276,13 +406,7 @@ export async function GET(
     font: titleFont,
     color: rgb(0, 0, 0)
   });
-  page.drawText(reserveUrl, {
-    x: 365,
-    y: 142,
-    size: 9,
-    font: bodyFont,
-    color: rgb(0.1, 0.1, 0.1)
-  });
+  drawParagraph(page, reserveUrl, 365, 142, bodyFont, 9, 182, rgb(0.1, 0.1, 0.1));
   page.drawText("QR: escanear para reservar", {
     x: 365,
     y: 124,

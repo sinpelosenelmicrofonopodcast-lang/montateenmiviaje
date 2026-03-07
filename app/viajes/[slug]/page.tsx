@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTripBySlugService } from "@/lib/catalog-service";
-import { availabilityPercent, formatDateRange, formatMoney } from "@/lib/format";
+import { availabilityPercent, formatDateRange, formatMoney, getStartingDeposit, getStartingPrice } from "@/lib/format";
 import { toPublicImageSrc } from "@/lib/image-url";
 
 interface TripDetailPageProps {
@@ -20,12 +20,8 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
 
   const availability = availabilityPercent(trip.availableSpots, trip.totalSpots);
   const safeImageSrc = toPublicImageSrc(trip.heroImage);
-  const minPrice = trip.packages.length > 0
-    ? Math.min(...trip.packages.map((pkg) => pkg.pricePerPerson))
-    : null;
-  const minDeposit = trip.packages.length > 0
-    ? Math.min(...trip.packages.map((pkg) => pkg.deposit))
-    : null;
+  const minPrice = getStartingPrice(trip.packages, trip.priceFrom);
+  const minDeposit = getStartingDeposit(trip.packages);
 
   return (
     <main className="container section">

@@ -13,6 +13,7 @@ const tripSchema = z.object({
   totalSpots: z.number().int().min(1),
   heroImage: z.string().min(1),
   summary: z.string().min(10),
+  priceFrom: z.number().positive().optional(),
   shortDescription: z.string().optional(),
   longDescription: z.string().optional(),
   durationDays: z.number().int().positive().optional(),

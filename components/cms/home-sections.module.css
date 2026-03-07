@@ -37,6 +37,30 @@
   background: linear-gradient(180deg, rgba(15, 17, 24, 0.16) 0%, rgba(10, 13, 18, 0.46) 65%, rgba(8, 10, 16, 0.56) 100%);
 }
 
+.heroDecorLeft,
+.heroDecorRight {
+  position: absolute;
+  z-index: 2;
+  color: rgba(255, 255, 255, 0.24);
+  pointer-events: none;
+}
+
+.heroDecorLeft {
+  left: clamp(14px, 2vw, 24px);
+  bottom: clamp(160px, 18vw, 220px);
+}
+
+.heroDecorRight {
+  right: clamp(14px, 2vw, 24px);
+  top: clamp(110px, 10vw, 140px);
+  color: rgba(255, 255, 255, 0.22);
+}
+
+.heroDecorIcon {
+  width: clamp(42px, 5vw, 62px);
+  height: clamp(42px, 5vw, 62px);
+}
+
 .heroContent {
   position: relative;
   z-index: 3;
@@ -224,6 +248,30 @@
   padding: 14px;
 }
 
+.trustHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.trustIconWrap {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid #d8e2ee;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #0b5f86;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.trustIcon {
+  width: 16px;
+  height: 16px;
+}
+
 .trustLabel {
   margin: 0;
   font-weight: 700;
@@ -330,6 +378,13 @@
   gap: 8px;
   flex-wrap: wrap;
   font-size: 12px;
+}
+
+.destinationPrice {
+  margin-top: 8px !important;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffe2b0 !important;
 }
 
 .progressMini {
@@ -615,6 +670,15 @@
   border-radius: 12px;
   background: linear-gradient(160deg, #0a678d, #2d8aaf);
   box-shadow: 0 12px 20px rgba(11, 87, 118, 0.24);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.benefitIconGlyph {
+  width: 20px;
+  height: 20px;
 }
 
 .benefitCard h3 {
@@ -646,6 +710,30 @@
   font-size: 2rem;
   line-height: 0.9;
   color: #0b5f86;
+}
+
+.howHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.howIconWrap {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid #d9e4ef;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #0b5f86;
+  background: #fff;
+}
+
+.howIcon {
+  width: 17px;
+  height: 17px;
 }
 
 .howCard h3 {
@@ -699,6 +787,30 @@
   border: 1px solid #e8edf2;
   border-radius: 14px;
   padding: 14px;
+}
+
+.utilityTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.utilityIconWrap {
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid #dbe4ef;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #0b5f86;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.utilityIcon {
+  width: 17px;
+  height: 17px;
 }
 
 .utilityBand h3 {
@@ -791,6 +903,10 @@
   .destinationGrid,
   .galleryGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .heroDecorRight {
+    display: none;
   }
 }
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Trip } from "@/lib/types";
-import { formatDateRange, formatMoney } from "@/lib/format";
+import { formatDateRange, formatMoney, getStartingPrice } from "@/lib/format";
 import { toPublicImageSrc } from "@/lib/image-url";
 
 interface AdminTripsManagerProps {
@@ -35,6 +35,7 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
     totalSpots: "20",
     heroImage: "",
     summary: "",
+    priceFrom: "",
     shortDescription: "",
     longDescription: "",
     durationDays: "",
@@ -63,6 +64,7 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
       totalSpots: "20",
       heroImage: "",
       summary: "",
+      priceFrom: "",
       shortDescription: "",
       longDescription: "",
       durationDays: "",
@@ -96,6 +98,7 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
       totalSpots: String(trip.totalSpots),
       heroImage: trip.heroImage,
       summary: trip.summary,
+      priceFrom: trip.priceFrom ? String(trip.priceFrom) : "",
       shortDescription: trip.shortDescription ?? "",
       longDescription: trip.longDescription ?? "",
       durationDays: trip.durationDays ? String(trip.durationDays) : "",
@@ -169,6 +172,7 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
         totalSpots: Number(form.totalSpots),
         heroImage: form.heroImage,
         summary: form.summary,
+        priceFrom: form.priceFrom ? Number(form.priceFrom) : undefined,
         shortDescription: form.shortDescription || undefined,
         longDescription: form.longDescription || undefined,
         durationDays: form.durationDays ? Number(form.durationDays) : undefined,
@@ -338,6 +342,16 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
             required
           />
         </label>
+        <label>
+          Precio desde (USD)
+          <input
+            type="number"
+            min={1}
+            value={form.priceFrom}
+            onChange={(event) => setForm({ ...form, priceFrom: event.target.value })}
+            placeholder="Ej: 1890"
+          />
+        </label>
         <label className="request-full">
           Descripción corta
           <textarea rows={2} value={form.shortDescription} onChange={(event) => setForm({ ...form, shortDescription: event.target.value })} />
@@ -434,10 +448,7 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
 
       <section className="stack-grid section">
         {trips.map((trip) => {
-          const minPrice =
-            trip.packages.length > 0
-              ? Math.min(...trip.packages.map((pkg) => pkg.pricePerPerson))
-              : 0;
+          const minPrice = getStartingPrice(trip.packages, trip.priceFrom);
 
           return (
             <article key={trip.id} className="card">
@@ -450,7 +461,7 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
                 <div className="right-info">
                   <p>{formatDateRange(trip.startDate, trip.endDate)}</p>
                   <p>Cupos: {trip.availableSpots}/{trip.totalSpots}</p>
-                  <p>Desde {minPrice ? formatMoney(minPrice) : "Sin paquetes"}</p>
+                  <p>Desde {minPrice ? formatMoney(minPrice) : "Sin precio configurado"}</p>
                   <p>Estado: {trip.publishStatus ?? "draft"}</p>
                 </div>
               </div>

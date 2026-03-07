@@ -22,6 +22,7 @@ interface AppTripRow {
   total_spots: number;
   hero_image: string;
   summary: string;
+  price_from?: number | string | null;
   short_description: string | null;
   long_description: string | null;
   duration_days: number | null;
@@ -150,6 +151,7 @@ export interface CreateTripInput {
   totalSpots: number;
   heroImage: string;
   summary: string;
+  priceFrom?: number;
   shortDescription?: string;
   longDescription?: string;
   durationDays?: number;
@@ -259,6 +261,23 @@ function toTextArray(values: string[]) {
   return values.map((item) => item.trim()).filter(Boolean);
 }
 
+function isMissingPriceFromColumn(message: string) {
+  return message.includes("price_from") && message.toLowerCase().includes("column");
+}
+
+function toOptionalNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+}
+
 function mapTrip(
   trip: AppTripRow,
   days: AppTripDayRow[],
@@ -277,6 +296,7 @@ function mapTrip(
     totalSpots: trip.total_spots,
     heroImage: trip.hero_image,
     summary: trip.summary,
+    priceFrom: toOptionalNumber(trip.price_from),
     shortDescription: trip.short_description ?? undefined,
     longDescription: trip.long_description ?? undefined,
     durationDays: trip.duration_days ?? undefined,
@@ -433,36 +453,49 @@ export async function createTripService(input: CreateTripInput) {
   ensureConfigured();
   const supabase = getSupabaseAdminClient();
 
-  const { data, error } = await supabase
+  const basePayload = {
+    slug: input.slug.trim().toLowerCase(),
+    title: input.title.trim(),
+    destination: input.destination.trim(),
+    category: input.category,
+    start_date: input.startDate,
+    end_date: input.endDate,
+    available_spots: input.availableSpots,
+    total_spots: input.totalSpots,
+    hero_image: input.heroImage.trim(),
+    summary: input.summary.trim(),
+    short_description: input.shortDescription?.trim() || null,
+    long_description: input.longDescription?.trim() || null,
+    duration_days: input.durationDays ?? null,
+    gallery_images: toTextArray(input.galleryImages ?? []),
+    includes: toTextArray(input.includes),
+    excludes: toTextArray(input.excludes),
+    policies: toTextArray(input.policies),
+    requirements: toTextArray(input.requirements),
+    hotels: toTextArray(input.hotels),
+    publish_status: input.publishStatus,
+    featured: input.featured,
+    seo_title: input.seoTitle?.trim() || null,
+    seo_description: input.seoDescription?.trim() || null,
+    seo_og_image: input.seoOgImage?.trim() || null
+  };
+
+  const payloadWithPrice = {
+    ...basePayload,
+    price_from: input.priceFrom ?? null
+  };
+
+  let { data, error } = await supabase
     .from("app_trips")
-    .insert({
-      slug: input.slug.trim().toLowerCase(),
-      title: input.title.trim(),
-      destination: input.destination.trim(),
-      category: input.category,
-      start_date: input.startDate,
-      end_date: input.endDate,
-      available_spots: input.availableSpots,
-      total_spots: input.totalSpots,
-      hero_image: input.heroImage.trim(),
-      summary: input.summary.trim(),
-      short_description: input.shortDescription?.trim() || null,
-      long_description: input.longDescription?.trim() || null,
-      duration_days: input.durationDays ?? null,
-      gallery_images: toTextArray(input.galleryImages ?? []),
-      includes: toTextArray(input.includes),
-      excludes: toTextArray(input.excludes),
-      policies: toTextArray(input.policies),
-      requirements: toTextArray(input.requirements),
-      hotels: toTextArray(input.hotels),
-      publish_status: input.publishStatus,
-      featured: input.featured,
-      seo_title: input.seoTitle?.trim() || null,
-      seo_description: input.seoDescription?.trim() || null,
-      seo_og_image: input.seoOgImage?.trim() || null
-    })
+    .insert(payloadWithPrice)
     .select("*")
     .single<AppTripRow>();
+
+  if (error && isMissingPriceFromColumn(error.message)) {
+    const fallback = await supabase.from("app_trips").insert(basePayload).select("*").single<AppTripRow>();
+    data = fallback.data ?? null;
+    error = fallback.error ?? null;
+  }
 
   if (error || !data) {
     throw new Error(`No se pudo crear viaje: ${error?.message ?? "sin datos"}`);
@@ -475,38 +508,56 @@ export async function updateTripService(tripId: string, input: CreateTripInput) 
   ensureConfigured();
   const supabase = getSupabaseAdminClient();
 
-  const { data, error } = await supabase
+  const basePayload = {
+    slug: input.slug.trim().toLowerCase(),
+    title: input.title.trim(),
+    destination: input.destination.trim(),
+    category: input.category,
+    start_date: input.startDate,
+    end_date: input.endDate,
+    available_spots: input.availableSpots,
+    total_spots: input.totalSpots,
+    hero_image: input.heroImage.trim(),
+    summary: input.summary.trim(),
+    short_description: input.shortDescription?.trim() || null,
+    long_description: input.longDescription?.trim() || null,
+    duration_days: input.durationDays ?? null,
+    gallery_images: toTextArray(input.galleryImages ?? []),
+    includes: toTextArray(input.includes),
+    excludes: toTextArray(input.excludes),
+    policies: toTextArray(input.policies),
+    requirements: toTextArray(input.requirements),
+    hotels: toTextArray(input.hotels),
+    publish_status: input.publishStatus,
+    featured: input.featured,
+    seo_title: input.seoTitle?.trim() || null,
+    seo_description: input.seoDescription?.trim() || null,
+    seo_og_image: input.seoOgImage?.trim() || null,
+    updated_at: new Date().toISOString()
+  };
+
+  const payloadWithPrice = {
+    ...basePayload,
+    price_from: input.priceFrom ?? null
+  };
+
+  let { data, error } = await supabase
     .from("app_trips")
-    .update({
-      slug: input.slug.trim().toLowerCase(),
-      title: input.title.trim(),
-      destination: input.destination.trim(),
-      category: input.category,
-      start_date: input.startDate,
-      end_date: input.endDate,
-      available_spots: input.availableSpots,
-      total_spots: input.totalSpots,
-      hero_image: input.heroImage.trim(),
-      summary: input.summary.trim(),
-      short_description: input.shortDescription?.trim() || null,
-      long_description: input.longDescription?.trim() || null,
-      duration_days: input.durationDays ?? null,
-      gallery_images: toTextArray(input.galleryImages ?? []),
-      includes: toTextArray(input.includes),
-      excludes: toTextArray(input.excludes),
-      policies: toTextArray(input.policies),
-      requirements: toTextArray(input.requirements),
-      hotels: toTextArray(input.hotels),
-      publish_status: input.publishStatus,
-      featured: input.featured,
-      seo_title: input.seoTitle?.trim() || null,
-      seo_description: input.seoDescription?.trim() || null,
-      seo_og_image: input.seoOgImage?.trim() || null,
-      updated_at: new Date().toISOString()
-    })
+    .update(payloadWithPrice)
     .eq("id", tripId)
     .select("*")
     .single<AppTripRow>();
+
+  if (error && isMissingPriceFromColumn(error.message)) {
+    const fallback = await supabase
+      .from("app_trips")
+      .update(basePayload)
+      .eq("id", tripId)
+      .select("*")
+      .single<AppTripRow>();
+    data = fallback.data ?? null;
+    error = fallback.error ?? null;
+  }
 
   if (error || !data) {
     throw new Error(`No se pudo actualizar viaje: ${error?.message ?? "sin datos"}`);

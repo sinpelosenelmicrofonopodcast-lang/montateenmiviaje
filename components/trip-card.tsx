@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Trip } from "@/lib/types";
-import { availabilityPercent, formatDateRange, formatMoney } from "@/lib/format";
+import { availabilityPercent, formatDateRange, formatMoney, getStartingPrice } from "@/lib/format";
 import { toPublicImageSrc } from "@/lib/image-url";
 
 interface TripCardProps {
@@ -9,9 +9,7 @@ interface TripCardProps {
 
 export function TripCard({ trip }: TripCardProps) {
   const safeImageSrc = toPublicImageSrc(trip.heroImage);
-  const lowestPrice = trip.packages.length > 0
-    ? Math.min(...trip.packages.map((pkg) => pkg.pricePerPerson))
-    : null;
+  const lowestPrice = getStartingPrice(trip.packages, trip.priceFrom);
   const availability = availabilityPercent(trip.availableSpots, trip.totalSpots);
 
   return (

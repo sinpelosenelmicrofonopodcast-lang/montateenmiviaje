@@ -39,6 +39,7 @@ export interface Trip {
   totalSpots: number;
   heroImage: string;
   summary: string;
+  priceFrom?: number;
   includes: string[];
   excludes: string[];
   policies: string[];

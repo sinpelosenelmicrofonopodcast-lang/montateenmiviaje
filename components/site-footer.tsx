@@ -1,31 +1,18 @@
 import { getSiteSettingService } from "@/lib/cms-service";
 import Link from "next/link";
 import { toPublicImageSrc } from "@/lib/image-url";
+import { TravelIcon } from "@/components/ui/travel-icons";
+import { normalizeExternalLink, normalizeWhatsAppLink, readSocialLinks } from "@/lib/social-links";
 
 function readString(value: unknown, fallback: string) {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
 }
 
-function readSocialLinks(value: unknown) {
-  if (!value || typeof value !== "object") {
-    return [];
-  }
-
-  const raw = value as Record<string, unknown>;
-  const list = [
-    { label: "Instagram", url: typeof raw.instagram === "string" ? raw.instagram : "" },
-    { label: "Facebook", url: typeof raw.facebook === "string" ? raw.facebook : "" },
-    { label: "TikTok", url: typeof raw.tiktok === "string" ? raw.tiktok : "" },
-    { label: "YouTube", url: typeof raw.youtube === "string" ? raw.youtube : "" }
-  ];
-
-  return list.filter((item) => item.url.trim());
-}
-
 export async function SiteFooter() {
-  const [identitySetting, contactSetting] = await Promise.all([
+  const [identitySetting, contactSetting, socialSetting] = await Promise.all([
     getSiteSettingService("site_identity"),
-    getSiteSettingService("contact_info")
+    getSiteSettingService("contact_info"),
+    getSiteSettingService("social_links")
   ]);
 
   const identity = identitySetting?.value ?? {};
@@ -36,8 +23,8 @@ export async function SiteFooter() {
   const tagline = readString(contact.tagline ?? identity.tagline, "Viajes grupales premium y experiencias internacionales.");
   const email = readString(contact.email, "hello@montateenmiviaje.com");
   const phone = readString(contact.phone, "+1 (555) 010-2026");
-  const whatsapp = readString(contact.whatsapp, "");
-  const socials = readSocialLinks(contact.socials);
+  const whatsapp = normalizeWhatsAppLink(contact.whatsapp);
+  const socials = readSocialLinks(socialSetting?.value ?? contact.socials);
   const quickLinks = [
     { label: "Viajes", href: "/viajes" },
     { label: "Ofertas", href: "/ofertas" },
@@ -65,7 +52,10 @@ export async function SiteFooter() {
             </div>
             <div className="footer-socials">
               {socials.map((social) => (
-                <a key={social.label} href={social.url} target="_blank" rel="noreferrer">
+                <a key={social.key} href={social.href} target="_blank" rel="noreferrer">
+                  <span className="footer-link-icon">
+                    <TravelIcon name={social.icon} />
+                  </span>
                   {social.label}
                 </a>
               ))}
@@ -73,7 +63,12 @@ export async function SiteFooter() {
           </div>
           <div className="footer-columns">
             <div>
-              <p className="footer-title">Explorar</p>
+              <p className="footer-title">
+                <span className="footer-title-icon">
+                  <TravelIcon name="palm" />
+                </span>
+                Explorar
+              </p>
               <div className="footer-link-list">
                 {quickLinks.map((link) => (
                   <Link key={link.href} href={link.href}>
@@ -83,7 +78,12 @@ export async function SiteFooter() {
               </div>
             </div>
             <div>
-              <p className="footer-title">Navegación</p>
+              <p className="footer-title">
+                <span className="footer-title-icon">
+                  <TravelIcon name="map" />
+                </span>
+                Navegacion
+              </p>
               <div className="footer-link-list">
                 {legalLinks.map((link) => (
                   <Link key={link.href} href={link.href}>
@@ -93,11 +93,33 @@ export async function SiteFooter() {
               </div>
             </div>
             <div>
-              <p className="footer-title">Contacto</p>
+              <p className="footer-title">
+                <span className="footer-title-icon">
+                  <TravelIcon name="message" />
+                </span>
+                Contacto
+              </p>
               <div className="footer-link-list">
-                <a href={`mailto:${email}`}>{email}</a>
-                <a href={`tel:${phone}`}>{phone}</a>
-                {whatsapp ? <a href={whatsapp} target="_blank" rel="noreferrer">WhatsApp</a> : null}
+                <a href={`mailto:${email}`}>
+                  <span className="footer-link-icon">
+                    <TravelIcon name="document" />
+                  </span>
+                  {email}
+                </a>
+                <a href={normalizeExternalLink(`tel:${phone}`)}>
+                  <span className="footer-link-icon">
+                    <TravelIcon name="message" />
+                  </span>
+                  {phone}
+                </a>
+                {whatsapp ? (
+                  <a href={whatsapp} target="_blank" rel="noreferrer">
+                    <span className="footer-link-icon">
+                      <TravelIcon name="whatsapp" />
+                    </span>
+                    WhatsApp
+                  </a>
+                ) : null}
               </div>
             </div>
           </div>
