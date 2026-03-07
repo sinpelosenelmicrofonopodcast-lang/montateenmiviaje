@@ -20,6 +20,7 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
   const [trips, setTrips] = useState(initialTrips);
   const [editingTripId, setEditingTripId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -118,6 +119,35 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
       throw new Error(payload.message ?? "No se pudieron cargar viajes");
     }
     setTrips(payload.trips);
+  }
+
+  async function handleHeroImageUpload(file: File) {
+    setUploadingImage(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+      formData.set("slug", form.slug || "trip");
+
+      const response = await fetch("/api/admin/uploads/trip-image", {
+        method: "POST",
+        body: formData
+      });
+
+      const payload = (await response.json()) as { url?: string; message?: string };
+      if (!response.ok || !payload.url) {
+        throw new Error(payload.message ?? "No se pudo subir imagen");
+      }
+
+      setForm((current) => ({ ...current, heroImage: payload.url! }));
+      setMessage("Imagen subida y asignada al viaje.");
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Error inesperado");
+    } finally {
+      setUploadingImage(false);
+    }
   }
 
   async function handleSaveTrip(event: React.FormEvent<HTMLFormElement>) {
@@ -276,6 +306,28 @@ export function AdminTripsManager({ initialTrips }: AdminTripsManagerProps) {
             required
           />
         </label>
+        <label className="request-full">
+          Subir imagen (si no tienes URL)
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              if (file) {
+                void handleHeroImageUpload(file);
+              }
+              event.currentTarget.value = "";
+            }}
+            disabled={uploadingImage}
+          />
+        </label>
+        {uploadingImage ? <p className="muted request-full">Subiendo imagen...</p> : null}
+        {form.heroImage ? (
+          <div className="request-full">
+            <p className="muted">Preview imagen</p>
+            <img src={form.heroImage} alt="Preview viaje" className="trip-card-image" />
+          </div>
+        ) : null}
         <label className="request-full">
           Resumen
           <textarea
