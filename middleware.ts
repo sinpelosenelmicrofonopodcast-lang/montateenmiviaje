@@ -9,6 +9,7 @@ const TRAVEL_WEB_PREFIX = "/admin/travel";
 const TRAVEL_API_PREFIX = "/api/admin/travel";
 const LEGACY_PUBLIC_ADMIN_PATHS = new Set(["/admin/login", "/admin/forbidden"]);
 const PORTAL_PREFIX = "/portal";
+const PORTAL_API_PREFIX = "/api/portal";
 const PUBLIC_PORTAL_PATHS = new Set(["/portal/login", "/portal/register"]);
 
 function hasSupabasePublicConfig() {
@@ -83,6 +84,7 @@ export async function middleware(request: NextRequest) {
   const isAdminWeb = isProtectedAdminWebPath(pathname) && !isTravelWeb;
   const isAdminApi = pathname.startsWith(ADMIN_API_PREFIX) && !isTravelApi;
   const isPortalPath = pathname === PORTAL_PREFIX || pathname.startsWith(`${PORTAL_PREFIX}/`);
+  const isPortalApi = pathname === PORTAL_API_PREFIX || pathname.startsWith(`${PORTAL_API_PREFIX}/`);
 
   if (LEGACY_PUBLIC_ADMIN_PATHS.has(pathname)) {
     return NextResponse.next();
@@ -92,7 +94,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (!isAdminWeb && !isAdminApi && !isTravelWeb && !isTravelApi && !isPortalPath) {
+  if (!isAdminWeb && !isAdminApi && !isTravelWeb && !isTravelApi && !isPortalPath && !isPortalApi) {
     return NextResponse.next();
   }
 
@@ -100,7 +102,7 @@ export async function middleware(request: NextRequest) {
     if (isPortalPath) {
       return toHomeRedirect(request);
     }
-    return isAdminApi || isTravelApi
+    return isAdminApi || isTravelApi || isPortalApi
       ? toApiForbidden("Supabase auth no configurado")
       : toHomeRedirect(request);
   }
@@ -134,6 +136,10 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
+    if (isPortalApi) {
+      return toApiForbidden("No autorizado");
+    }
+
     if (isPortalPath) {
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = "/portal/login";
@@ -143,7 +149,7 @@ export async function middleware(request: NextRequest) {
     return isAdminApi || isTravelApi ? toApiForbidden("No autorizado") : toHomeRedirect(request);
   }
 
-  if (isPortalPath) {
+  if (isPortalPath || isPortalApi) {
     return response;
   }
 
@@ -187,5 +193,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/admin/:path*", "/admin/:path*", "/api/admin/:path*", "/portal/:path*"]
+  matcher: ["/dashboard/admin/:path*", "/admin/:path*", "/api/admin/:path*", "/portal/:path*", "/api/portal/:path*"]
 };

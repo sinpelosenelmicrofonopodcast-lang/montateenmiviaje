@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getTripBySlugService } from "@/lib/catalog-service";
+import { registerFirstBookingConversionService } from "@/lib/growth-service";
 import { createBookingWithTripService } from "@/lib/runtime-service";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 const createBookingSchema = z.object({
   customerName: z.string().min(2),
@@ -39,6 +41,21 @@ export async function POST(request: Request) {
       travelers: payload.travelers,
       depositAmount: payload.amount
     }, trip);
+
+    try {
+      const supabase = await getSupabaseServerClient();
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+      if (user) {
+        await registerFirstBookingConversionService(user.id, {
+          booking_id: booking.id,
+          trip_slug: payload.tripSlug
+        });
+      }
+    } catch {
+      // no-op: booking should not fail due to growth tracking
+    }
 
     return NextResponse.json({
       bookingId: booking.id,

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { listGalleryBundlesService, listOffersService, listTestimonialsService, listTripsService } from "@/lib/catalog-service";
 import { formatMoney } from "@/lib/format";
 import { requireAdminServerAccess } from "@/lib/admin-guard";
+import { flattenAdminNav } from "@/lib/admin-navigation";
 import { listRafflesService } from "@/lib/raffles-service";
 import {
   getDashboardSnapshotService,
@@ -12,22 +13,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const modules = [
-  { title: "CMS", href: "/admin/cms", helper: "Control total del contenido público" },
-  { title: "Viajes", href: "/admin/viajes", helper: "Builder, publicación y brochure" },
-  { title: "Ofertas", href: "/admin/ofertas", helper: "Códigos y promociones activas" },
-  { title: "Solicitudes", href: "/admin/solicitudes", helper: "Paquetes a medida por cliente" },
-  { title: "Sorteos", href: "/admin/sorteos", helper: "Gratis o pago por entrada" },
-  { title: "Travel Desk", href: "/admin/travel", helper: "Búsqueda interna, cotizaciones y paquetes" },
-  { title: "Reservas", href: "/admin/reservas", helper: "Pipeline comercial completo" },
-  { title: "Pagos", href: "/admin/pagos", helper: "Depósitos y balances PayPal" },
-  { title: "CRM", href: "/admin/crm", helper: "Clientes, notas y preferencias" },
-  { title: "Testimonios", href: "/admin/testimonios", helper: "Moderación verificada" },
-  { title: "Galería", href: "/admin/galeria", helper: "Álbumes y media destacados" },
-  { title: "Documentos", href: "/admin/documentos", helper: "Brochures y archivos" },
-  { title: "Automatizaciones", href: "/admin/automatizaciones", helper: "Flujos email y WhatsApp" },
-  { title: "Configuración", href: "/admin/configuracion", helper: "Roles e integraciones" }
-];
+const modules = flattenAdminNav().filter((item) => item.href !== "/admin");
 
 export default async function AdminOverviewPage() {
   await requireAdminServerAccess();
@@ -88,8 +74,8 @@ export default async function AdminOverviewPage() {
 
       <section className="admin-grid section">
         {modules.map((module) => (
-          <article key={module.title} className="admin-card">
-            <h3>{module.title}</h3>
+          <article key={module.href} className="admin-card">
+            <h3>{module.label}</h3>
             <p className="muted">{module.helper}</p>
             <Link className="button-outline" href={module.href}>
               Abrir módulo

@@ -87,6 +87,144 @@ export interface Customer {
   tags: string[];
 }
 
+export interface UserProfile {
+  id: string;
+  email: string;
+  role: string;
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
+  phone?: string;
+  country?: string;
+  city?: string;
+  stateRegion?: string;
+  dateOfBirth?: string;
+  preferredLanguage: "es" | "en";
+  avatarUrl?: string;
+  accountStatus: "active" | "pending" | "suspended" | "archived";
+  registrationSource: string;
+  referredByUserId?: string;
+  referredByCode?: string;
+  homeAirportCode?: string;
+  marketingOptIn: boolean;
+  profileCompleted: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface TravelerProfile {
+  id: string;
+  userId: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  suffix?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  relationshipToUser?: string;
+  nationality?: string;
+  passportNumber?: string;
+  passportIssuingCountry?: string;
+  passportExpirationDate?: string;
+  knownTravelerNumber?: string;
+  redressNumber?: string;
+  loyaltyPrograms: Record<string, unknown>[];
+  specialAssistanceNotes?: string;
+  mealPreferences?: string;
+  seatPreferences?: string;
+  travelerType: "adult" | "child" | "infant";
+  isDefault: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TravelerPreferences {
+  id?: string;
+  userId: string;
+  budgetMin?: number;
+  budgetMax?: number;
+  preferredDestinations: string[];
+  dreamDestinations: string[];
+  preferredAirlines: string[];
+  preferredHotelStyle?: string;
+  preferredTripTypes: string[];
+  preferredDepartureAirports: string[];
+  typicalTripDurationDays?: number;
+  preferredTravelMonths: number[];
+  usuallyTravelsWith?: string;
+  travelFrequencyPerYear?: number;
+  notes?: string;
+  updatedAt?: string;
+}
+
+export interface EmergencyContact {
+  id: string;
+  userId: string;
+  contactName: string;
+  relationship: string;
+  phone: string;
+  email?: string;
+  country?: string;
+  isPrimary: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReferralCode {
+  id: string;
+  userId: string;
+  referralCode: string;
+  shareSlug: string;
+  status: "active" | "paused" | "blocked";
+  clicksCount: number;
+  signupsCount: number;
+  conversionsCount: number;
+  rewardPointsEarned: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReferralEvent {
+  id: string;
+  referralCodeId: string;
+  referrerUserId: string;
+  referredUserId?: string;
+  eventType: string;
+  eventMetadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface ReferralReward {
+  id: string;
+  userId: string;
+  referralEventId?: string;
+  rewardType: string;
+  rewardValue: number;
+  rewardStatus: string;
+  description?: string;
+  issuedAt?: string;
+  redeemedAt?: string;
+  createdAt: string;
+}
+
+export interface OnboardingProgress {
+  id?: string;
+  userId: string;
+  accountCreated: boolean;
+  emailVerified: boolean;
+  basicProfileCompleted: boolean;
+  travelerAdded: boolean;
+  preferencesCompleted: boolean;
+  referralPromptSeen: boolean;
+  firstQuoteRequested: boolean;
+  onboardingCompleted: boolean;
+  completionPercentage: number;
+  currentStep: string;
+  lastCompletedStep?: string;
+  updatedAt?: string;
+  createdAt?: string;
+}
+
 export interface BookingRecord {
   id: string;
   customerId: string;

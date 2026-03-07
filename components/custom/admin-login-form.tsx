@@ -37,7 +37,7 @@ export function AdminLoginForm({ nextPath, initialError }: AdminLoginFormProps) 
         throw new Error(signInError?.message ?? "No se pudo iniciar sesión");
       }
 
-      router.push(nextPath || "/dashboard/admin");
+      router.push(nextPath || "/admin");
       router.refresh();
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Error inesperado");

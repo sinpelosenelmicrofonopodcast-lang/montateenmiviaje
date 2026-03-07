@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isAdminRole } from "@/lib/admin-auth";
 import { getServerAuthContext } from "@/lib/admin-guard";
 import { getSiteSettingService } from "@/lib/cms-service";
 import { toPublicImageSrc } from "@/lib/image-url";
@@ -30,10 +31,12 @@ export async function SiteHeader() {
   const siteName = readString(identity.siteName, "Móntate en mi viaje");
   const logoUrl = toPublicImageSrc(readString(identity.logoUrl, "/logo-header.png"), "/logo-header.png");
   const isLoggedIn = Boolean(auth.user);
+  const isAdmin = isAdminRole(auth.role);
   const navItems = [
     ...links,
-    ...(isLoggedIn ? [{ href: "/dashboard", label: "Dashboard" }] : []),
-    ...(isLoggedIn ? [{ href: "/portal", label: "Portal" }] : [])
+    ...(isLoggedIn && !isAdmin ? [{ href: "/portal", label: "Portal" }] : []),
+    ...(isLoggedIn && isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
+    ...(isLoggedIn ? [{ href: "/dashboard", label: "Mi panel" }] : [])
   ];
 
   return (

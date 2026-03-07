@@ -23,9 +23,14 @@ import {
 const MANUAL_PAYMENT_METHODS: RaffleManualPaymentMethod[] = ["paypal", "zelle", "cashapp", "ath_movil", "cash", "venmo", "other"];
 
 export interface RegisterCustomerInput {
-  fullName: string;
+  fullName?: string;
+  firstName?: string;
+  lastName?: string;
   email: string;
-  phone: string;
+  phone?: string;
+  country?: string;
+  referralCode?: string;
+  registrationSource?: string;
   authUserId?: string;
 }
 
@@ -737,7 +742,7 @@ function toPublicDisplayName(entry: RaffleEntry, mode: RaffleParticipantsMode) {
   return "Participante";
 }
 
-async function syncProfileFromRegistration(input: { authUserId: string; email: string; phone: string }) {
+async function syncProfileFromRegistration(input: { authUserId: string; email: string; phone?: string }) {
   const supabase = getSupabaseAdminClient();
   const basePayload = {
     id: input.authUserId,
@@ -748,7 +753,7 @@ async function syncProfileFromRegistration(input: { authUserId: string; email: s
   const withPhone = await supabase.from("profiles").upsert(
     {
       ...basePayload,
-      phone: input.phone.trim()
+      phone: input.phone?.trim() || null
     },
     { onConflict: "id" }
   );
@@ -1095,10 +1100,12 @@ export async function registerCustomerService(input: RegisterCustomerInput) {
   ensureConfigured();
 
   const supabase = getSupabaseAdminClient();
+  const fullName = input.fullName?.trim() || `${input.firstName?.trim() ?? ""} ${input.lastName?.trim() ?? ""}`.trim();
   const payload: Record<string, unknown> = {
-    full_name: normalizeName(input.fullName),
+    full_name: normalizeName(fullName || normalizeEmail(input.email)),
     email: normalizeEmail(input.email),
-    phone: input.phone.trim(),
+    phone: input.phone?.trim() || null,
+    country: input.country?.trim() || null,
     is_registered: true
   };
   if (input.authUserId) {

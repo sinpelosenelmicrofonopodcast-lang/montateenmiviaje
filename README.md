@@ -4,8 +4,8 @@ Aplicación SaaS para viajes grupales premium (website + admin + portal cliente)
 
 ## Incluye
 - Website pública premium (Home, Viajes, Detalle, Reservar, Testimonios, Galería, Contacto).
-- Dashboard público en `/dashboard`.
-- Admin privado en rutas ocultas `/dashboard/admin/*`.
+- Ruta de panel unificada en `/dashboard` (redirige por rol a portal o admin).
+- Admin privado canónico en `/admin/*` (legacy compatible en `/dashboard/admin/*`).
 - Dashboard administrativo completo V1.
 - Builder de paquetes por viaje (`/admin/viajes/[slug]/builder`).
 - CRM de clientes y pipeline de reservas.
@@ -58,13 +58,14 @@ Copia `.env.example` a `.env.local` y completa:
    - `supabase/migrations/005_profiles_admin_auth.sql`
    - `supabase/migrations/006_portal_auth_link.sql`
    - `supabase/migrations/007_profiles_sync_and_phone.sql`
+   - `supabase/migrations/011_growth_profiles_referrals_onboarding.sql`
 3. Configura en Vercel/local:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
 
 ## Admin Auth (rol admin)
-- Las rutas `/dashboard/admin/*`, `/admin/*` (legacy) y `/api/admin/*` están protegidas por middleware.
+- Las rutas `/admin/*`, `/dashboard/admin/*` (legacy) y `/api/admin/*` están protegidas por middleware.
 - Login admin: `/admin/login` (Supabase Auth email + password).
 - El control de acceso principal usa `public.profiles.role`.
 - Si el rol no es admin, redirige a `/`.
@@ -89,10 +90,15 @@ Abrir [http://localhost:3000](http://localhost:3000).
 
 ## Portal cliente (sesión obligatoria)
 - Registro de cuenta cliente: `/portal/register` (también disponible en `/registro`).
-- El registro solicita nombre, correo, teléfono y contraseña.
+- El registro optimizado solicita nombre, apellido, país, correo, contraseña y referido opcional.
 - Login portal: `/portal/login`.
 - Rutas privadas del portal (`/portal`, `/portal/*`) solo accesibles con sesión activa.
 - El enlace de `Portal` en navegación solo se muestra cuando el usuario está autenticado.
+- Módulos nuevos:
+  - `/portal/onboarding`
+  - `/portal/perfil`
+  - `/portal/viajeros`
+  - `/portal/referidos`
 
 ## Endpoints clave
 - `POST /api/bookings`
@@ -132,6 +138,6 @@ Abrir [http://localhost:3000](http://localhost:3000).
 
 ## Notas importantes
 - Registro, sorteos, catálogo, reservas, pagos, CRM, solicitudes personalizadas, documentos y reportes se conectan a Supabase.
-- Todo el contenido operativo se gestiona desde dashboard admin (sin mocks en runtime).
+- Todo el contenido operativo se gestiona desde el panel admin (sin mocks en runtime).
 - Validar firma de webhook de PayPal antes de producción.
 - Stripe está removido en esta rama; pagos solo por PayPal.

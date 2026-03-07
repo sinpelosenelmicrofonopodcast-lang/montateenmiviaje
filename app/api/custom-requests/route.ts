@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { markOnboardingStepService } from "@/lib/growth-service";
 import { createCustomTripRequestService, listCustomTripRequestsService } from "@/lib/runtime-service";
+import { getSupabaseServerClient } from "@/lib/supabase-server";
 
 const createSchema = z.object({
   customerName: z.string().min(2),
@@ -23,6 +25,19 @@ export async function POST(request: Request) {
   try {
     const payload = createSchema.parse(await request.json());
     const customRequest = await createCustomTripRequestService(payload);
+
+    try {
+      const supabase = await getSupabaseServerClient();
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+      if (user) {
+        await markOnboardingStepService(user.id, "first_quote_requested");
+      }
+    } catch {
+      // no-op: onboarding tracking must not block request creation
+    }
+
     return NextResponse.json({
       requestId: customRequest.id,
       status: customRequest.status,

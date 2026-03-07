@@ -35,7 +35,7 @@ export default async function OfertasPage() {
         <h1>{bundle.page?.heroTitle ?? "Ofertas activas"}</h1>
         <p className="section-subtitle">
           {bundle.page?.heroSubtitle ??
-            "Todas las promociones se gestionan desde dashboard admin y se publican automáticamente."}
+            "Todas las promociones se gestionan desde el panel admin y se publican automáticamente."}
         </p>
       </header>
 

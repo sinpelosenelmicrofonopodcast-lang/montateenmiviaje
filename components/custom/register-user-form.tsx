@@ -5,12 +5,19 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser";
 
-export function RegisterUserForm() {
+interface RegisterUserFormProps {
+  initialReferralCode?: string;
+}
+
+export function RegisterUserForm({ initialReferralCode }: RegisterUserFormProps) {
   const router = useRouter();
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
-  const [fullName, setFullName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [country, setCountry] = useState("Puerto Rico");
   const [phone, setPhone] = useState("");
+  const [referralCode, setReferralCode] = useState(initialReferralCode ?? "");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -37,8 +44,14 @@ export function RegisterUserForm() {
       }
 
       const normalizedPhone = phone.trim();
-      if (normalizedPhone.length < 7) {
-        throw new Error("Ingresa un número de teléfono válido");
+      const normalizedCountry = country.trim();
+      if (normalizedCountry.length < 2) {
+        throw new Error("Selecciona un país válido");
+      }
+
+      const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+      if (fullName.length < 3) {
+        throw new Error("Debes indicar nombre y apellido");
       }
 
       const signUp = await supabase.auth.signUp({
@@ -46,8 +59,13 @@ export function RegisterUserForm() {
         password,
         options: {
           data: {
-            full_name: fullName.trim(),
-            phone: normalizedPhone
+            first_name: firstName.trim(),
+            last_name: lastName.trim(),
+            full_name: fullName,
+            phone: normalizedPhone || null,
+            country: normalizedCountry,
+            referral_code: referralCode.trim() || null,
+            registration_source: "portal_signup"
           }
         }
       });
@@ -61,9 +79,14 @@ export function RegisterUserForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fullName,
+          firstName,
+          lastName,
           email,
-          phone: normalizedPhone,
-          authUserId: signUp.data.user?.id
+          country: normalizedCountry,
+          phone: normalizedPhone || undefined,
+          referralCode: referralCode.trim() || undefined,
+          registrationSource: "portal_signup",
+          authUserId: signUp.data.user?.id ?? undefined
         })
       });
 
@@ -73,7 +96,7 @@ export function RegisterUserForm() {
       }
 
       if (signUp.data.session) {
-        router.push("/portal");
+        router.push("/portal/onboarding");
         router.refresh();
         return;
       }
@@ -83,9 +106,12 @@ export function RegisterUserForm() {
           ? "Cuenta creada. Revisa tu correo para confirmar y luego inicia sesión en el portal."
           : "Registro procesado."
       );
-      setFullName("");
+      setFirstName("");
+      setLastName("");
       setEmail("");
+      setCountry("Puerto Rico");
       setPhone("");
+      setReferralCode("");
       setPassword("");
       setConfirmPassword("");
     } catch (registerError) {
@@ -102,21 +128,37 @@ export function RegisterUserForm() {
       <p className="muted">Con tu cuenta podrás entrar al portal privado, sorteos y documentos de viaje.</p>
       <div className="request-grid">
         <label>
-          Nombre completo
-          <input value={fullName} onChange={(event) => setFullName(event.target.value)} required />
+          Nombre
+          <input value={firstName} onChange={(event) => setFirstName(event.target.value)} autoComplete="given-name" required />
+        </label>
+        <label>
+          Apellido
+          <input value={lastName} onChange={(event) => setLastName(event.target.value)} autoComplete="family-name" required />
         </label>
         <label>
           Correo
           <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
         </label>
         <label>
-          Teléfono (WhatsApp)
+          País
+          <input value={country} onChange={(event) => setCountry(event.target.value)} autoComplete="country-name" required />
+        </label>
+        <label>
+          Teléfono (opcional)
           <input
             type="tel"
             value={phone}
             onChange={(event) => setPhone(event.target.value)}
             autoComplete="tel"
-            required
+          />
+        </label>
+        <label>
+          Código de referido (opcional)
+          <input
+            value={referralCode}
+            onChange={(event) => setReferralCode(event.target.value.toUpperCase())}
+            placeholder="MONTATE-AB12"
+            autoComplete="off"
           />
         </label>
         <label>

@@ -13,7 +13,7 @@ export default async function PortalLoginPage({ searchParams }: PortalLoginPageP
   const nextPath = params.next?.startsWith("/portal") ? params.next : undefined;
 
   if (session) {
-    redirect("/portal");
+    redirect("/portal/onboarding");
   }
 
   return (

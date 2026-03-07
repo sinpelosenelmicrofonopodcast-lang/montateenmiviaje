@@ -36,7 +36,7 @@ export function PortalLoginForm({ nextPath }: PortalLoginFormProps) {
         throw new Error(signIn.error?.message ?? "No se pudo iniciar sesión");
       }
 
-      router.push(nextPath || "/portal");
+      router.push(nextPath || "/portal/onboarding");
       router.refresh();
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : "Error inesperado");
