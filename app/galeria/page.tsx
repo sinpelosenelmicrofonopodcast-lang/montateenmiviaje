@@ -3,6 +3,7 @@ import Image from "next/image";
 import { GenericSectionsRenderer } from "@/components/cms/generic-sections";
 import { listGalleryBundlesService } from "@/lib/catalog-service";
 import { getCmsPageBundleService } from "@/lib/cms-service";
+import { toPublicImageSrc } from "@/lib/image-url";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,14 @@ export default async function GaleriaPage() {
               {albumMedia.map((media) =>
                 media.type === "photo" ? (
                   <figure key={media.id} className="media-card">
-                    <Image src={media.url} alt={media.caption} width={900} height={600} className="media-image" />
+                    <Image
+                      src={toPublicImageSrc(media.url)}
+                      alt={media.caption}
+                      width={900}
+                      height={600}
+                      className="media-image"
+                      unoptimized
+                    />
                     <figcaption>{media.caption}</figcaption>
                   </figure>
                 ) : (
