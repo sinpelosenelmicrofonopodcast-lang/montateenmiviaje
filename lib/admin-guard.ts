@@ -11,6 +11,48 @@ interface ProfileRoleRow {
   role: string | null;
 }
 
+async function resolveProfileRoleRow(
+  user: User,
+  supabaseAdmin: ReturnType<typeof getSupabaseAdminClient> | null,
+  supabaseServer: Awaited<ReturnType<typeof getSupabaseServerClient>>
+) {
+  const byId = hasSupabaseConfig() && supabaseAdmin
+    ? await supabaseAdmin
+        .from("profiles")
+        .select("id,email,role")
+        .eq("id", user.id)
+        .maybeSingle<ProfileRoleRow>()
+    : await supabaseServer
+        .from("profiles")
+        .select("id,email,role")
+        .eq("id", user.id)
+        .maybeSingle<ProfileRoleRow>();
+
+  if (!byId.error && byId.data) {
+    return byId.data;
+  }
+
+  if (user.email) {
+    const byEmail = hasSupabaseConfig() && supabaseAdmin
+      ? await supabaseAdmin
+          .from("profiles")
+          .select("id,email,role")
+          .eq("email", user.email.toLowerCase())
+          .maybeSingle<ProfileRoleRow>()
+      : await supabaseServer
+          .from("profiles")
+          .select("id,email,role")
+          .eq("email", user.email.toLowerCase())
+          .maybeSingle<ProfileRoleRow>();
+
+    if (!byEmail.error && byEmail.data) {
+      return byEmail.data;
+    }
+  }
+
+  return null;
+}
+
 export interface ServerAuthContext {
   user: User | null;
   role: AppRole;
@@ -41,31 +83,13 @@ export async function getServerAuthContext(): Promise<ServerAuthContext> {
     };
   }
 
-  const profileResult = hasSupabaseConfig()
-    ? await getSupabaseAdminClient()
-        .from("profiles")
-        .select("id,email,role")
-        .eq("id", user.id)
-        .maybeSingle<ProfileRoleRow>()
-    : await supabase
-        .from("profiles")
-        .select("id,email,role")
-        .eq("id", user.id)
-        .maybeSingle<ProfileRoleRow>();
-
-  if (profileResult.error) {
-    return {
-      user,
-      role: isAdminUser(user) ? "admin" : "user",
-      email: user.email ?? null
-    };
-  }
-
-  const resolvedRole = normalizeRole(profileResult.data?.role);
+  const adminClient = hasSupabaseConfig() ? getSupabaseAdminClient() : null;
+  const profileRow = await resolveProfileRoleRow(user, adminClient, supabase);
+  const resolvedRole = normalizeRole(profileRow?.role);
   return {
     user,
     role: resolvedRole === "user" && isAdminUser(user) ? "admin" : resolvedRole,
-    email: profileResult.data?.email ?? user.email ?? null
+    email: profileRow?.email ?? user.email ?? null
   };
 }
 

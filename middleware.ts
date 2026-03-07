@@ -30,7 +30,7 @@ function toApiForbidden(message = "Forbidden") {
   return NextResponse.json({ message }, { status: 403 });
 }
 
-async function getProfileRoleWithServiceKey(userId: string) {
+async function getProfileRoleWithServiceKey(userId: string, email?: string | null) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -45,17 +45,33 @@ async function getProfileRoleWithServiceKey(userId: string) {
     }
   });
 
-  const profile = await adminClient
+  const byId = await adminClient
     .from("profiles")
     .select("role")
     .eq("id", userId)
     .maybeSingle<{ role: string | null }>();
 
-  if (profile.error) {
+  if (byId.error) {
     return null;
   }
 
-  return normalizeRole(profile.data?.role);
+  if (byId.data?.role) {
+    return normalizeRole(byId.data.role);
+  }
+
+  if (email) {
+    const byEmail = await adminClient
+      .from("profiles")
+      .select("role")
+      .eq("email", email.toLowerCase())
+      .maybeSingle<{ role: string | null }>();
+
+    if (!byEmail.error && byEmail.data?.role) {
+      return normalizeRole(byEmail.data.role);
+    }
+  }
+
+  return null;
 }
 
 export async function middleware(request: NextRequest) {
@@ -127,16 +143,27 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  const serviceRole = await getProfileRoleWithServiceKey(user.id);
-  const roleFromSession = serviceRole
-    ? serviceRole
-    : (
-      await supabase
+  const serviceRole = await getProfileRoleWithServiceKey(user.id, user.email);
+  let roleFromSession: string | null | undefined = serviceRole;
+  if (!roleFromSession) {
+    const byId = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle<{ role: string | null }>();
+
+    roleFromSession = byId.data?.role;
+
+    if (!roleFromSession && user.email) {
+      const byEmail = await supabase
         .from("profiles")
         .select("role")
-        .eq("id", user.id)
-        .maybeSingle<{ role: string | null }>()
-    ).data?.role;
+        .eq("email", user.email.toLowerCase())
+        .maybeSingle<{ role: string | null }>();
+
+      roleFromSession = byEmail.data?.role;
+    }
+  }
 
   const hasAdminAccess = isAdminRole(roleFromSession) || isAdminUser(user);
 
