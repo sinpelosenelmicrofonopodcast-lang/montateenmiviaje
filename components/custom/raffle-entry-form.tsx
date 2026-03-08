@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { PaymentMethodLinks } from "@/components/payment-method-links";
 import { PaymentMethodLink } from "@/lib/payment-links";
 import { RafflePaymentMethodConfig } from "@/lib/types";
+import styles from "./raffle-entry-form.module.css";
 
 interface RaffleEntryFormProps {
   raffleId: string;
@@ -13,6 +15,12 @@ interface RaffleEntryFormProps {
   paymentMethods?: RafflePaymentMethodConfig[];
   paymentNote?: string;
   initialAvailableNumbers: number[];
+  prefilledEmail?: string;
+  isAuthenticated?: boolean;
+}
+
+function toProviderLabel(provider: string) {
+  return provider.replace(/[_-]/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export function RaffleEntryForm({
@@ -22,12 +30,15 @@ export function RaffleEntryForm({
   paymentLinks = [],
   paymentMethods = [],
   paymentNote,
-  initialAvailableNumbers
+  initialAvailableNumbers,
+  prefilledEmail,
+  isAuthenticated = false
 }: RaffleEntryFormProps) {
-  const [customerEmail, setCustomerEmail] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [customerEmail, setCustomerEmail] = useState(prefilledEmail ?? "");
+  const [phone, setPhone] = useState("");
   const [paymentReference, setPaymentReference] = useState("");
   const [note, setNote] = useState("");
-  const [phone, setPhone] = useState("");
   const [publicDisplayName, setPublicDisplayName] = useState("");
   const [consentPublicListing, setConsentPublicListing] = useState(true);
   const [referredByCode, setReferredByCode] = useState("");
@@ -35,11 +46,19 @@ export function RaffleEntryForm({
   const [paymentScreenshotUrl, setPaymentScreenshotUrl] = useState("");
   const [uploadingProof, setUploadingProof] = useState(false);
   const [availableNumbers, setAvailableNumbers] = useState(initialAvailableNumbers);
-  const [chosenNumber, setChosenNumber] = useState("");
+  const [chosenNumber, setChosenNumber] = useState<number | null>(null);
+  const [numberQuery, setNumberQuery] = useState("");
+  const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [loading, setLoading] = useState(false);
   const [joined, setJoined] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (prefilledEmail) {
+      setCustomerEmail(prefilledEmail);
+    }
+  }, [prefilledEmail]);
 
   const enabledPaymentMethods = useMemo(
     () =>
@@ -48,6 +67,14 @@ export function RaffleEntryForm({
         .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)),
     [paymentMethods]
   );
+
+  const filteredAvailableNumbers = useMemo(() => {
+    const normalized = numberQuery.trim();
+    if (!normalized) {
+      return availableNumbers;
+    }
+    return availableNumbers.filter((number) => String(number).includes(normalized));
+  }, [availableNumbers, numberQuery]);
 
   const selectedMethodConfig = useMemo(() => {
     if (!enabledPaymentMethods.length) return null;
@@ -92,7 +119,17 @@ export function RaffleEntryForm({
   async function handleJoin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!chosenNumber) {
-      setError("Selecciona un número disponible");
+      setError("Selecciona un número disponible.");
+      return;
+    }
+
+    if (fullName.trim().length < 2) {
+      setError("Ingresa tu nombre completo.");
+      return;
+    }
+
+    if (!phone.trim()) {
+      setError("Ingresa tu teléfono para confirmar la participación.");
       return;
     }
 
@@ -100,7 +137,6 @@ export function RaffleEntryForm({
     setSuccess(null);
     setError(null);
 
-    const selectedNumber = Number(chosenNumber);
     const requiresReference = Boolean(selectedMethodConfig?.requiresReference);
     const requiresScreenshot = Boolean(selectedMethodConfig?.requiresScreenshot);
     const normalizedReference = paymentReference.trim();
@@ -124,13 +160,13 @@ export function RaffleEntryForm({
         body: JSON.stringify({
           raffleId,
           customerEmail,
-          chosenNumber: selectedNumber,
-          note,
+          chosenNumber,
+          note: note.trim() || undefined,
           paymentReference: normalizedReference || undefined,
-          phone: phone || undefined,
-          publicDisplayName: publicDisplayName || undefined,
+          phone: phone.trim(),
+          publicDisplayName: (publicDisplayName.trim() || fullName.trim()) || undefined,
           consentPublicListing,
-          referredByCode: referredByCode || undefined,
+          referredByCode: referredByCode.trim() || undefined,
           paymentMethod: selectedMethodConfig?.provider || undefined,
           paymentScreenshotUrl: paymentScreenshotUrl || undefined
         })
@@ -141,17 +177,14 @@ export function RaffleEntryForm({
         throw new Error(payload.message ?? "No se pudo registrar participación");
       }
 
-      setSuccess(`Número ${selectedNumber} reservado. Estado: ${payload.entry.status}`);
+      setSuccess(`Número #${chosenNumber} enviado correctamente. Estado: ${payload.entry.status}.`);
       setJoined(true);
-      setAvailableNumbers((current) => current.filter((number) => number !== selectedNumber));
-      setChosenNumber("");
-      setNote("");
+      setAvailableNumbers((current) => current.filter((number) => number !== chosenNumber));
+      setChosenNumber(null);
       setPaymentReference("");
       setPaymentScreenshotUrl("");
-      setPhone("");
-      setPublicDisplayName("");
+      setNote("");
       setReferredByCode("");
-      setConsentPublicListing(true);
     } catch (joinError) {
       const errMessage = joinError instanceof Error ? joinError.message : "Error inesperado";
       setError(errMessage);
@@ -160,86 +193,213 @@ export function RaffleEntryForm({
     }
   }
 
+  const noNumbersLeft = availableNumbers.length === 0;
+  const requiresReference = Boolean(selectedMethodConfig?.requiresReference);
+  const requiresScreenshot = Boolean(selectedMethodConfig?.requiresScreenshot);
+  const fallbackPaymentMethods =
+    enabledPaymentMethods.length === 0 && paymentLinks.length > 0 ? paymentLinks : [];
+
   return (
-    <form className="card" onSubmit={handleJoin}>
-      <h3>Participar</h3>
-      <p className="muted">Debes usar el mismo correo con el que te registraste.</p>
-      <p className="muted">
-        Números disponibles: <strong>{availableNumbers.length}</strong>
-      </p>
-      <label>
-        Correo registrado
-        <input type="email" value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} required />
-      </label>
-      <label>
-        Nombre para lista pública (opcional)
-        <input value={publicDisplayName} onChange={(event) => setPublicDisplayName(event.target.value)} placeholder="Ej: Juan C." />
-      </label>
-      <label>
-        Teléfono (opcional)
-        <input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Ej: +1 787..." />
-      </label>
-      <label>
-        Código de referido (opcional)
-        <input value={referredByCode} onChange={(event) => setReferredByCode(event.target.value)} placeholder="Ej: JUAN-1234" />
-      </label>
-      <label>
-        Elige tu número de lotería
-        <select
-          value={chosenNumber}
-          onChange={(event) => setChosenNumber(event.target.value)}
-          required
-          disabled={availableNumbers.length === 0 || joined}
-        >
-          <option value="">Selecciona un número</option>
-          {availableNumbers.map((number) => (
-            <option key={number} value={number}>
+    <form className={`card ${styles.form}`} onSubmit={handleJoin}>
+      <div className={styles.header}>
+        <p className={styles.eyebrow}>Participación oficial</p>
+        <h3 className={styles.title}>Completa tu entrada en minutos</h3>
+        <p className={styles.subtitle}>
+          Flujo rápido: elige número, confirma datos y completa pago según el método disponible.
+        </p>
+      </div>
+
+      <div className={styles.loginStrip}>
+        {isAuthenticated ? (
+          <p>
+            Sesión activa detectada. Usa este mismo email para validar tu participación.
+          </p>
+        ) : (
+          <p>
+            Debes estar registrado para participar.{" "}
+            <Link href="/portal/login">Inicia sesión</Link> o{" "}
+            <Link href="/registro">crea tu cuenta</Link>.
+          </p>
+        )}
+      </div>
+
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <h4>1) Elige tu número</h4>
+          <p>Números disponibles: <strong>{availableNumbers.length}</strong></p>
+        </div>
+        <div className={styles.numberToolbar}>
+          <label>
+            Buscar número
+            <input
+              value={numberQuery}
+              onChange={(event) => setNumberQuery(event.target.value)}
+              placeholder="Ej: 24"
+              inputMode="numeric"
+            />
+          </label>
+          <button
+            type="button"
+            className="button-outline"
+            onClick={() => {
+              if (!availableNumbers.length) return;
+              const random = availableNumbers[Math.floor(Math.random() * availableNumbers.length)];
+              setChosenNumber(random);
+            }}
+            disabled={noNumbersLeft || joined}
+          >
+            Número aleatorio
+          </button>
+        </div>
+        <div className={styles.numberGrid}>
+          {filteredAvailableNumbers.slice(0, 240).map((number) => (
+            <button
+              key={number}
+              type="button"
+              className={`${styles.numberTile} ${chosenNumber === number ? styles.numberTileActive : ""}`}
+              onClick={() => setChosenNumber(number)}
+              disabled={joined}
+            >
               #{number}
-            </option>
+            </button>
           ))}
-        </select>
-      </label>
+          {filteredAvailableNumbers.length === 0 ? (
+            <p className={styles.emptyNumbers}>No hay resultados con esa búsqueda.</p>
+          ) : null}
+        </div>
+        {chosenNumber ? (
+          <p className={styles.selectionNotice}>
+            Tu número seleccionado: <strong>#{chosenNumber}</strong>
+          </p>
+        ) : null}
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <h4>2) Tus datos</h4>
+          <p>Campos principales para validar tu entrada.</p>
+        </div>
+        <div className={styles.fieldGrid}>
+          <label>
+            Nombre completo
+            <input
+              value={fullName}
+              onChange={(event) => setFullName(event.target.value)}
+              placeholder="Ej: María Rodríguez"
+              required
+            />
+          </label>
+          <label>
+            Email registrado
+            <input
+              type="email"
+              value={customerEmail}
+              onChange={(event) => setCustomerEmail(event.target.value)}
+              placeholder="tu@email.com"
+              required
+            />
+          </label>
+          <label>
+            Teléfono
+            <input
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="Ej: +1 787 000 0000"
+              required
+            />
+          </label>
+        </div>
+        <button
+          type="button"
+          className="button-outline"
+          onClick={() => setShowAdvancedFields((value) => !value)}
+        >
+          {showAdvancedFields ? "Ocultar campos opcionales" : "Mostrar campos opcionales"}
+        </button>
+        {showAdvancedFields ? (
+          <div className={styles.fieldGrid} style={{ marginTop: "10px" }}>
+            <label>
+              Nombre público (opcional)
+              <input
+                value={publicDisplayName}
+                onChange={(event) => setPublicDisplayName(event.target.value)}
+                placeholder="Ej: Juan C."
+              />
+            </label>
+            <label>
+              Código de referido (opcional)
+              <input
+                value={referredByCode}
+                onChange={(event) => setReferredByCode(event.target.value)}
+                placeholder="Ej: MONTATE-1234"
+              />
+            </label>
+            <label className={styles.fullWidth}>
+              Nota adicional (opcional)
+              <textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} />
+            </label>
+          </div>
+        ) : null}
+
+        <label className={styles.checkboxRow}>
+          <input
+            type="checkbox"
+            checked={consentPublicListing}
+            onChange={(event) => setConsentPublicListing(event.target.checked)}
+          />
+          Permito aparecer en la lista pública de participantes (sin exponer email/teléfono).
+        </label>
+      </section>
+
       {!isFree ? (
-        <>
-          <p className="muted"><strong>Instrucciones de pago:</strong> {paymentInstructions}</p>
+        <section className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <h4>3) Método de pago</h4>
+            <p>Selecciona cómo pagar y sigue instrucciones.</p>
+          </div>
+          <p className={styles.instructions}><strong>Instrucciones:</strong> {paymentInstructions}</p>
           {enabledPaymentMethods.length > 0 ? (
-            <div className="payment-links-grid">
+            <div className={styles.paymentMethodGrid}>
               {enabledPaymentMethods.map((method) => (
                 <button
                   key={method.provider}
                   type="button"
-                  className={`payment-link-card ${selectedMethodConfig?.provider === method.provider ? "is-selected" : ""}`}
+                  className={`${styles.paymentMethodCard} ${
+                    selectedMethodConfig?.provider === method.provider ? styles.paymentMethodCardActive : ""
+                  }`}
                   onClick={() => setSelectedPaymentMethod(method.provider)}
                 >
-                  <span>{method.label}</span>
+                  <p>{method.label || toProviderLabel(method.provider)}</p>
+                  <div className={styles.methodMeta}>
+                    {method.requiresReference ? <span>Requiere referencia</span> : null}
+                    {method.requiresScreenshot ? <span>Requiere comprobante</span> : null}
+                    {method.isAutomatic ? <span>Aprobación automática</span> : <span>Revisión manual</span>}
+                  </div>
                 </button>
               ))}
             </div>
           ) : null}
+
           {selectedMethodConfig ? (
-            <div className="card" style={{ marginTop: "12px" }}>
+            <div className={styles.paymentDetail}>
               <p><strong>Método seleccionado:</strong> {selectedMethodConfig.label}</p>
               {selectedMethodConfig.instructions ? <p className="muted">{selectedMethodConfig.instructions}</p> : null}
               {selectedMethodConfig.destinationValue ? (
-                <p><strong>Destino:</strong> {selectedMethodConfig.destinationValue}</p>
+                <p><strong>Destino de pago:</strong> {selectedMethodConfig.destinationValue}</p>
               ) : null}
               {selectedMethodConfig.href ? (
-                <p>
-                  <a href={selectedMethodConfig.href} target="_blank" rel="noreferrer">
-                    Ir al enlace de pago
-                  </a>
-                </p>
+                <a className="button-outline" href={selectedMethodConfig.href} target="_blank" rel="noreferrer">
+                  Ir al enlace de pago
+                </a>
               ) : null}
             </div>
           ) : null}
-          {enabledPaymentMethods.length === 0 && paymentLinks.length > 0 ? (
-            <PaymentMethodLinks
-              methods={paymentLinks}
-              note={paymentNote}
-              title="Pagar entrada"
-            />
+
+          {fallbackPaymentMethods.length > 0 ? (
+            <PaymentMethodLinks methods={fallbackPaymentMethods} note={paymentNote} title="Opciones de pago activas" />
           ) : null}
-          {selectedMethodConfig?.requiresReference ?? true ? (
+
+          {requiresReference ? (
             <label>
               Referencia de pago
               <input
@@ -249,7 +409,8 @@ export function RaffleEntryForm({
               />
             </label>
           ) : null}
-          {selectedMethodConfig?.requiresScreenshot ? (
+
+          {requiresScreenshot ? (
             <label>
               Screenshot/comprobante
               <input
@@ -272,23 +433,19 @@ export function RaffleEntryForm({
               ) : null}
             </label>
           ) : null}
-        </>
+        </section>
       ) : null}
-      <label>
-        Nota adicional
-        <textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} />
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={consentPublicListing}
-          onChange={(event) => setConsentPublicListing(event.target.checked)}
-        />
-        Permito aparecer en lista pública del sorteo
-      </label>
-      <button className="button-dark" type="submit" disabled={loading || availableNumbers.length === 0 || joined}>
-        {loading ? "Enviando..." : availableNumbers.length === 0 ? "Números agotados" : "Enviar participación"}
-      </button>
+
+      <div className={styles.submitRow}>
+        <button className="button-dark" type="submit" disabled={loading || noNumbersLeft || joined}>
+          {loading ? "Enviando..." : noNumbersLeft ? "Números agotados" : joined ? "Participación enviada" : "Confirmar participación"}
+        </button>
+      </div>
+
+      <p className={styles.trustCopy}>
+        Tu entrada se procesa con validación de número y registro auditable. Recibirás confirmación una vez sea revisada.
+      </p>
+
       {success ? <p className="success">{success}</p> : null}
       {error ? <p className="error">{error}</p> : null}
     </form>

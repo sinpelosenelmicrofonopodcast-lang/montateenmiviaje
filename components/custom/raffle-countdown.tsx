@@ -2,11 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import styles from "./raffle-countdown.module.css";
 
 interface RaffleCountdownProps {
   drawAt: string;
   drawnAt?: string;
   winnerNumber?: number;
+  availableNumbers?: number;
+  totalNumbers?: number;
 }
 
 function formatTime(ms: number) {
@@ -25,7 +28,7 @@ function formatTime(ms: number) {
   };
 }
 
-export function RaffleCountdown({ drawAt, drawnAt, winnerNumber }: RaffleCountdownProps) {
+export function RaffleCountdown({ drawAt, drawnAt, winnerNumber, availableNumbers, totalNumbers }: RaffleCountdownProps) {
   const router = useRouter();
   const target = useMemo(() => new Date(drawAt).getTime(), [drawAt]);
   const [remainingMs, setRemainingMs] = useState(() => Math.max(target - Date.now(), 0));
@@ -55,28 +58,56 @@ export function RaffleCountdown({ drawAt, drawnAt, winnerNumber }: RaffleCountdo
 
   if (drawnAt) {
     return (
-      <div className="card">
-        <h3>Resultado del sorteo</h3>
+      <div className={`card ${styles.countdownCard}`}>
+        <p className={styles.eyebrow}>Resultado oficial</p>
+        <h3 className={styles.title}>Sorteo finalizado</h3>
         {winnerNumber ? (
-          <p>
-            Número ganador: <strong>#{winnerNumber}</strong>
+          <p className={styles.result}>
+            Número ganador: <strong className={styles.winner}>#{winnerNumber}</strong>
           </p>
         ) : (
-          <p>El sorteo cerró sin participaciones confirmadas.</p>
+          <p className="muted">El sorteo cerró sin participaciones confirmadas.</p>
         )}
       </div>
     );
   }
 
   const time = formatTime(remainingMs);
+  const sold = Number.isFinite(totalNumbers) && Number.isFinite(availableNumbers)
+    ? Math.max((totalNumbers ?? 0) - (availableNumbers ?? 0), 0)
+    : null;
+  const soldPercent = sold !== null && totalNumbers && totalNumbers > 0 ? Math.round((sold / totalNumbers) * 100) : null;
+  const urgencyCopy =
+    typeof availableNumbers === "number" && availableNumbers <= 15
+      ? `Solo quedan ${availableNumbers} números disponibles.`
+      : typeof soldPercent === "number" && soldPercent >= 50
+        ? `Más del ${soldPercent}% ya fue reservado.`
+        : "Selecciona tu número antes del cierre.";
 
   return (
-    <div className="card">
-      <h3>Countdown anuncio ganador</h3>
-      <p className="countdown-clock">
-        {time.days}d : {time.hours}h : {time.minutes}m : {time.seconds}s
-      </p>
-      <p className="muted">Cuando llegue a 0, la app ejecuta el sorteo automáticamente.</p>
+    <div className={`card ${styles.countdownCard}`}>
+      <p className={styles.eyebrow}>Cuenta regresiva</p>
+      <h3 className={styles.title}>El sorteo se anuncia en</h3>
+      <div className={styles.units}>
+        <div className={styles.unit}>
+          <p className={styles.value}>{time.days}</p>
+          <p className={styles.label}>días</p>
+        </div>
+        <div className={styles.unit}>
+          <p className={styles.value}>{time.hours}</p>
+          <p className={styles.label}>horas</p>
+        </div>
+        <div className={styles.unit}>
+          <p className={styles.value}>{time.minutes}</p>
+          <p className={styles.label}>min</p>
+        </div>
+        <div className={styles.unit}>
+          <p className={styles.value}>{time.seconds}</p>
+          <p className={styles.label}>seg</p>
+        </div>
+      </div>
+      <p className={styles.note}>{urgencyCopy}</p>
+      <p className="muted">Cuando llegue a 0, se ejecuta el draw verificable automáticamente.</p>
     </div>
   );
 }

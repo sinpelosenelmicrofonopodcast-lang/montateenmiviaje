@@ -66,6 +66,25 @@ function classForKey(key: string) {
   }
 }
 
+function helperTextForKey(key: string) {
+  switch (key) {
+    case "paypal":
+      return "Pago inmediato";
+    case "cashapp":
+    case "zelle":
+    case "ath_movil":
+    case "athmovil":
+    case "venmo":
+      return "Transferencia manual";
+    case "stripe":
+    case "apple_pay":
+    case "google_pay":
+      return "Checkout digital";
+    default:
+      return "Abrir método";
+  }
+}
+
 function externalTargetForHref(href: string) {
   if (href.startsWith("http://") || href.startsWith("https://")) {
     return { target: "_blank", rel: "noreferrer" as const };
@@ -87,7 +106,10 @@ export function PaymentMethodLinks({ methods, note, title = "Métodos de pago" }
           {methods.map((method) => (
             <a key={`${method.key}-${method.href}`} href={method.href} className="payment-link-card" {...externalTargetForHref(method.href)}>
               <span className={classForKey(method.key)}>{iconTextForKey(method.key)}</span>
-              <span>{method.label}</span>
+              <span style={{ display: "grid", gap: "2px" }}>
+                <strong>{method.label}</strong>
+                <small className="muted">{helperTextForKey(method.key)}</small>
+              </span>
             </a>
           ))}
         </div>

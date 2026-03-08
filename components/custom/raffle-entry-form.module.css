@@ -1,0 +1,268 @@
+.form {
+  display: grid;
+  gap: 16px;
+  border: 1px solid #e6ecf4;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+}
+
+.header {
+  display: grid;
+  gap: 6px;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #425671;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.35rem, 2.9vw, 1.95rem);
+  line-height: 1.04;
+}
+
+.subtitle {
+  margin: 0;
+  color: #5b6778;
+  font-size: 15px;
+}
+
+.loginStrip {
+  border: 1px solid #dbe7f4;
+  border-radius: 12px;
+  background: #f4f9ff;
+  padding: 11px 12px;
+  font-size: 14px;
+}
+
+.loginStrip p {
+  margin: 0;
+  color: #21314a;
+}
+
+.loginStrip a {
+  text-decoration: underline;
+}
+
+.section {
+  border: 1px solid #e6ecf4;
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  background: #fff;
+}
+
+.sectionHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sectionHeader h4 {
+  margin: 0;
+  font-size: 1.08rem;
+}
+
+.sectionHeader p {
+  margin: 0;
+  font-size: 13px;
+  color: #5f6e80;
+}
+
+.numberToolbar {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.numberToolbar label {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.numberToolbar input {
+  border: 1px solid #dce4ee;
+  border-radius: 12px;
+  padding: 11px 12px;
+  font: inherit;
+}
+
+.numberGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 8px;
+  max-height: 268px;
+  overflow: auto;
+}
+
+.numberTile {
+  border: 1px solid #d8dfe7;
+  border-radius: 12px;
+  padding: 9px 6px;
+  background: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.numberTileActive {
+  background: #101827;
+  border-color: #101827;
+  color: #fff;
+}
+
+.selectionNotice {
+  margin: 0;
+  border-radius: 10px;
+  border: 1px solid #d9e9da;
+  background: #edf8ed;
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+.emptyNumbers {
+  margin: 0;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px dashed #cfd8e4;
+  text-align: center;
+  color: #5a6a7c;
+  grid-column: 1 / -1;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fieldGrid label {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.fieldGrid input,
+.fieldGrid textarea {
+  border: 1px solid #dce4ee;
+  border-radius: 12px;
+  padding: 11px 12px;
+  font: inherit;
+  background: #fff;
+}
+
+.fullWidth {
+  grid-column: 1 / -1;
+}
+
+.checkboxRow {
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.paymentMethodGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+}
+
+.paymentMethodCard {
+  border: 1px solid #dbe4f1;
+  border-radius: 12px;
+  padding: 11px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+}
+
+.paymentMethodCard p {
+  margin: 0;
+  font-weight: 800;
+}
+
+.paymentMethodCardActive {
+  border-color: #111827;
+  box-shadow: inset 0 0 0 1px #111827;
+  background: #f8fafc;
+}
+
+.methodMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.methodMeta span {
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid #dbe4f1;
+  background: #fff;
+  color: #344258;
+}
+
+.paymentDetail {
+  border: 1px solid #dbe4f1;
+  border-radius: 12px;
+  background: #f9fcff;
+  padding: 11px 12px;
+  display: grid;
+  gap: 7px;
+}
+
+.paymentDetail p {
+  margin: 0;
+}
+
+.instructions {
+  margin: 0;
+  color: #29364a;
+}
+
+.submitRow {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.trustCopy {
+  margin: 0;
+  font-size: 13px;
+  color: #59687b;
+}
+
+@media (max-width: 980px) {
+  .fieldGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .numberToolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .fieldGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .numberGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

@@ -1,0 +1,73 @@
+.countdownCard {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #e6e6e6;
+  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%);
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+  color: #4b5f7a;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.3rem, 2.8vw, 1.85rem);
+}
+
+.units {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.unit {
+  border-radius: 12px;
+  border: 1px solid #dfe7f2;
+  background: #fff;
+  padding: 10px 8px;
+  text-align: center;
+}
+
+.value {
+  margin: 0;
+  font-size: clamp(1.35rem, 4vw, 1.9rem);
+  line-height: 1;
+  font-weight: 800;
+  color: #101827;
+}
+
+.label {
+  margin: 5px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #5a6678;
+}
+
+.note {
+  margin: 0;
+  font-size: 14px;
+  color: #1f2a3a;
+  font-weight: 600;
+}
+
+.result {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.winner {
+  font-size: 1.7rem;
+}
+
+@media (max-width: 680px) {
+  .units {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
