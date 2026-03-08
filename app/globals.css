@@ -176,6 +176,7 @@ h4 {
   background: #fff;
   cursor: pointer;
   font-family: inherit;
+  color: #1c2430;
 }
 
 .nav-action-muted {
@@ -184,6 +185,13 @@ h4 {
 }
 
 .nav-action-primary {
+  background: #111;
+  color: #fff;
+  border-color: #111;
+}
+
+.nav-actions-desktop a.nav-action-primary,
+.nav-actions-desktop button.nav-action-primary {
   background: #111;
   color: #fff;
   border-color: #111;
@@ -428,6 +436,7 @@ h4 {
 .button-outline {
   border-color: #d9d9d9;
   background: var(--white);
+  color: var(--black);
 }
 
 .button-outline:hover {
