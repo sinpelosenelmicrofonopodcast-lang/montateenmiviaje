@@ -58,6 +58,10 @@ export function RegisterUserForm({ initialReferralCode }: RegisterUserFormProps)
         email: email.trim().toLowerCase(),
         password,
         options: {
+          emailRedirectTo:
+            typeof window !== "undefined"
+              ? `${window.location.origin}/registro/confirmado`
+              : undefined,
           data: {
             first_name: firstName.trim(),
             last_name: lastName.trim(),

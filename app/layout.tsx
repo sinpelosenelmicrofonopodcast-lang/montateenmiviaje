@@ -3,6 +3,7 @@ import "./globals.css";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { WhatsAppFloat } from "@/components/whatsapp-float";
+import { OneSignalInit } from "@/components/custom/onesignal-init";
 import { getSiteSettingService } from "@/lib/cms-service";
 
 function readString(value: unknown, fallback: string) {
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es">
       <body>
+        <OneSignalInit />
         <SiteHeader />
         {children}
         <SiteFooter />
