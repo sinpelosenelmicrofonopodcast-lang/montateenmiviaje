@@ -1,0 +1,270 @@
+.shell {
+  display: grid;
+  gap: 12px;
+}
+
+.fullscreen {
+  min-height: 100vh;
+  align-content: center;
+}
+
+.panel {
+  border: 1px solid #dfe7f1;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 8% 10%, rgba(50, 120, 178, 0.1), transparent 28%),
+    radial-gradient(circle at 95% 8%, rgba(204, 143, 82, 0.1), transparent 30%),
+    #fff;
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 800;
+  color: #405770;
+}
+
+.title {
+  margin: 2px 0 0;
+  font-size: clamp(1.4rem, 2.2vw, 2.05rem);
+}
+
+.subtitle {
+  margin: 7px 0 0;
+  color: #58667a;
+  max-width: 62ch;
+}
+
+.statusBadge {
+  border-radius: 999px;
+  padding: 6px 10px;
+  border: 1px solid #d6dfeb;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.statuspending {
+  color: #3f4f66;
+}
+
+.statusready {
+  border-color: #c8def6;
+  background: #ecf6ff;
+  color: #0e4f8a;
+}
+
+.statusdrawing {
+  border-color: #d7c18c;
+  background: #fff7e2;
+  color: #5a4518;
+}
+
+.statusreveal,
+.statuspost {
+  border-color: #b9e0c2;
+  background: #eaf8ef;
+  color: #1d6a3f;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.stats article {
+  border: 1px solid #e1e8f1;
+  border-radius: 12px;
+  padding: 9px;
+  background: #fff;
+  display: grid;
+  gap: 5px;
+}
+
+.stats span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #63738b;
+}
+
+.stats strong {
+  font-size: 14px;
+  color: #182238;
+}
+
+.drum {
+  border: 1px solid #e1e8f1;
+  border-radius: 16px;
+  background: #fbfdff;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.mixer {
+  border-radius: 12px;
+  border: 1px solid #dbe5f2;
+  min-height: 160px;
+  background: linear-gradient(180deg, #f4f8ff 0%, #eef3fa 100%);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(62px, 1fr));
+  align-content: start;
+  gap: 8px;
+  padding: 10px;
+}
+
+.mixerRunning .ball {
+  animation: pulse 0.75s ease-in-out infinite;
+}
+
+.ball {
+  border-radius: 999px;
+  border: 1px solid #cad8ea;
+  background: #fff;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: #22304a;
+}
+
+.empty {
+  margin: 0;
+  align-self: center;
+  justify-self: center;
+  color: #63738b;
+  text-align: center;
+}
+
+.reveal {
+  border: 1px solid #dde7f3;
+  border-radius: 14px;
+  padding: 12px;
+  background: #fff;
+  display: grid;
+  gap: 6px;
+}
+
+.revealLabel {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: #5f6e84;
+}
+
+.revealNumber {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 3.4rem);
+  line-height: 0.94;
+  font-weight: 800;
+}
+
+.winnerName {
+  margin: 0;
+  font-size: 15px;
+  color: #33445e;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.verification {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.panelHeader {
+  display: grid;
+  gap: 3px;
+}
+
+.panelHeader h4 {
+  margin: 0;
+}
+
+.panelHeader p {
+  margin: 0;
+}
+
+.verificationGrid {
+  display: grid;
+  gap: 8px;
+}
+
+.verificationRow {
+  border: 1px solid #dfe7f3;
+  border-radius: 12px;
+  background: #fff;
+  padding: 9px 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.verificationLabel {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #617089;
+}
+
+.verificationValue {
+  margin: 4px 0 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  color: #13213a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.disclaimer {
+  margin: 0;
+  font-size: 12px;
+  color: #5d6b7f;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+@media (max-width: 900px) {
+  .stats {
+    grid-template-columns: 1fr;
+  }
+
+  .header {
+    flex-direction: column;
+  }
+
+  .mixer {
+    min-height: 132px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

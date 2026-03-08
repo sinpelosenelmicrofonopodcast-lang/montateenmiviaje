@@ -5,7 +5,9 @@ import { CopyValueButton } from "@/components/custom/copy-value-button";
 import { RaffleCountdown } from "@/components/custom/raffle-countdown";
 import { RaffleEntryForm } from "@/components/custom/raffle-entry-form";
 import { RaffleNumberGrid } from "@/components/custom/raffle-number-grid";
+import { TombolaShell } from "@/components/custom/tombola/tombola-shell";
 import { PaymentMethodLinks } from "@/components/payment-method-links";
+import { isAdminRole } from "@/lib/admin-auth";
 import { getServerAuthContext } from "@/lib/admin-guard";
 import { getSiteSettingService } from "@/lib/cms-service";
 import { formatMoney } from "@/lib/format";
@@ -16,6 +18,7 @@ import {
   getRafflePublicSummaryService,
   getRaffleVerificationPayloadService,
   listAvailableRaffleNumbersService,
+  listRaffleNumbersService,
   listPublicRaffleParticipantsService
 } from "@/lib/raffles-service";
 import { normalizeWhatsAppLink } from "@/lib/social-links";
@@ -54,11 +57,12 @@ export default async function SorteoDetailPage({ params }: SorteoDetailPageProps
     notFound();
   }
 
-  const [summary, participants, verification, availableNumbers] = await Promise.all([
+  const [summary, participants, verification, availableNumbers, allNumbers] = await Promise.all([
     getRafflePublicSummaryService(id),
     listPublicRaffleParticipantsService(id),
     getRaffleVerificationPayloadService(id),
-    listAvailableRaffleNumbersService(id)
+    listAvailableRaffleNumbersService(id),
+    listRaffleNumbersService(id, { limit: raffle.numberPoolSize })
   ]);
 
   const confirmedCount = summary.metrics.confirmedEntries;
@@ -133,6 +137,19 @@ export default async function SorteoDetailPage({ params }: SorteoDetailPageProps
     "Memorial Weekend 2026 con vuelos, hotel y experiencia premium incluida.";
 
   const showParticipants = participants.length > 0;
+  const eligibleNumbers = (
+    verification?.eligibleNumbers && verification.eligibleNumbers.length > 0
+      ? verification.eligibleNumbers
+      : allNumbers
+          .filter((item) => item.status === "sold" || item.status === "winner")
+          .map((item) => item.numberValue)
+  )
+    .filter((value, index, array) => array.indexOf(value) === index)
+    .sort((a, b) => a - b);
+  const winnerDisplayName =
+    typeof raffle.winnerNumber === "number"
+      ? participants.find((item) => item.chosenNumber === raffle.winnerNumber)?.displayName ?? null
+      : null;
 
   return (
     <main className="container section">
@@ -220,6 +237,19 @@ export default async function SorteoDetailPage({ params }: SorteoDetailPageProps
           winnerNumber={raffle.winnerNumber}
           availableNumbers={availableCount}
           totalNumbers={totalNumbers}
+        />
+
+        <TombolaShell
+          raffleId={raffle.id}
+          title={raffle.title}
+          drawAt={raffle.drawAt}
+          drawnAt={raffle.drawnAt}
+          winnerNumber={raffle.winnerNumber}
+          winnerDisplayName={winnerDisplayName}
+          eligibleNumbers={eligibleNumbers}
+          verification={verification}
+          canRunDraw={isAdminRole(auth.role)}
+          liveHref={`/sorteos/${raffle.id}/live`}
         />
 
         <section className={styles.flowGrid}>

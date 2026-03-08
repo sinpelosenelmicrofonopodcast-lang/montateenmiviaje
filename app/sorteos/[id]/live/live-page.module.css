@@ -1,0 +1,16 @@
+.liveRoot {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: auto;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(37, 93, 145, 0.28), transparent 32%),
+    radial-gradient(circle at 86% 10%, rgba(207, 130, 79, 0.26), transparent 34%),
+    linear-gradient(135deg, #0a0f18 0%, #111c2d 55%, #15253c 100%);
+  padding: clamp(14px, 2vw, 28px);
+}
+
+.liveCanvas {
+  width: min(1200px, 100%);
+  margin: 0 auto;
+}
