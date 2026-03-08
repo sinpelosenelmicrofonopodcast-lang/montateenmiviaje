@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CopyValueButton } from "@/components/custom/copy-value-button";
 import type { RaffleVerificationResult } from "@/lib/raffles-service";
 import styles from "./raffle-verification-panel.module.css";
 
 interface RaffleVerificationPanelProps {
   raffleId: string;
-  initialVerification: RaffleVerificationResult;
+  initialVerification?: RaffleVerificationResult;
   showExplainer?: boolean;
 }
 
@@ -37,7 +37,7 @@ export function RaffleVerificationPanel({
   initialVerification,
   showExplainer = true
 }: RaffleVerificationPanelProps) {
-  const [verification, setVerification] = useState(initialVerification);
+  const [verification, setVerification] = useState<RaffleVerificationResult | null>(initialVerification ?? null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,6 +56,26 @@ export function RaffleVerificationPanel({
     } finally {
       setLoading(false);
     }
+  }
+
+  useEffect(() => {
+    if (!verification) {
+      void runVerify();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!verification) {
+    return (
+      <section className={styles.panel} id="verificacion">
+        <header className={styles.header}>
+          <div>
+            <h3>Resultado verificable</h3>
+            <p className="muted">Cargando información del sorteo...</p>
+          </div>
+        </header>
+      </section>
+    );
   }
 
   const payload = verification.payload;

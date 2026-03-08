@@ -1,14 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { RaffleVerificationPanel } from "@/components/custom/raffle-verification-panel";
-import { RaffleCountdown } from "@/components/custom/raffle-countdown";
-import { RaffleEntryForm } from "@/components/custom/raffle-entry-form";
-import { RaffleNumberGrid } from "@/components/custom/raffle-number-grid";
-import { TombolaShell } from "@/components/custom/tombola/tombola-shell";
-import { PaymentMethodLinks } from "@/components/payment-method-links";
-import { isAdminRole } from "@/lib/admin-auth";
-import { getServerAuthContext } from "@/lib/admin-guard";
+import { RaffleConversionFlow } from "@/components/custom/raffle-conversion-flow";
+import { RaffleTransparencyAccordion } from "@/components/custom/raffle-transparency-accordion";
 import { getSiteSettingService } from "@/lib/cms-service";
 import { formatMoney } from "@/lib/format";
 import { toPublicImageSrc } from "@/lib/image-url";
@@ -16,12 +10,9 @@ import { parsePaymentLinksSetting } from "@/lib/payment-links";
 import {
   getRaffleByIdService,
   getRafflePublicSummaryService,
-  getRaffleVerificationPayloadService,
-  listAvailableRaffleNumbersService,
-  listPublicRaffleParticipantsService,
-  listRaffleNumbersService,
-  verifyRaffleDrawService
+  listAvailableRaffleNumbersService
 } from "@/lib/raffles-service";
+import { getServerAuthContext } from "@/lib/admin-guard";
 import { normalizeWhatsAppLink } from "@/lib/social-links";
 import styles from "./raffle-page.module.css";
 
@@ -31,49 +22,39 @@ interface SorteoDetailPageProps {
 
 export const dynamic = "force-dynamic";
 
-function formatDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleDateString("es-PR", {
-    day: "numeric",
-    month: "short",
-    year: "numeric"
-  });
+function asFaqItems(value: unknown) {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .map((item) => (item && typeof item === "object" ? item as { question?: unknown; answer?: unknown } : null))
+    .filter((item): item is { question?: unknown; answer?: unknown } => Boolean(item))
+    .map((item) => ({
+      question: typeof item.question === "string" ? item.question.trim() : "",
+      answer: typeof item.answer === "string" ? item.answer.trim() : ""
+    }))
+    .filter((item) => item.question && item.answer);
 }
 
 export default async function SorteoDetailPage({ params }: SorteoDetailPageProps) {
   const { id } = await params;
-  const [raffle, paymentSetting, contactSetting, auth] = await Promise.all([
+  const [raffle, summary, availableNumbers, paymentSetting, contactSetting, auth] = await Promise.all([
     getRaffleByIdService(id),
+    getRafflePublicSummaryService(id),
+    listAvailableRaffleNumbersService(id),
     getSiteSettingService("payment_links"),
     getSiteSettingService("contact_info"),
     getServerAuthContext()
   ]);
-  const paymentConfig = parsePaymentLinksSetting(paymentSetting);
-  const whatsappHref = normalizeWhatsAppLink((contactSetting?.value ?? {}).whatsapp) || "https://wa.me/17872349614";
 
   if (!raffle || raffle.status === "draft") {
     notFound();
   }
 
-  const [summary, participants, verification, verificationResult, availableNumbers, soldOrWinnerNumbers] = await Promise.all([
-    getRafflePublicSummaryService(id),
-    listPublicRaffleParticipantsService(id),
-    getRaffleVerificationPayloadService(id),
-    verifyRaffleDrawService(id),
-    listAvailableRaffleNumbersService(id),
-    listRaffleNumbersService(id, {
-      statuses: ["sold", "winner"],
-      limit: raffle.numberPoolSize
-    })
-  ]);
-
-  const confirmedCount = summary.metrics.confirmedEntries;
+  const paymentConfig = parsePaymentLinksSetting(paymentSetting);
+  const whatsappHref = normalizeWhatsAppLink((contactSetting?.value ?? {}).whatsapp) || "https://wa.me/17872349614";
   const canParticipate = raffle.status === "published" && !raffle.drawnAt;
+
   const rafflePaymentMethods = (raffle.paymentMethods ?? []).filter((method) => method.enabled);
-  const rafflePaymentMethodsWithLink = rafflePaymentMethods
+  const paymentLinks = rafflePaymentMethods
     .filter((method) => method.href)
     .map((method) => ({
       key: method.provider,
@@ -81,78 +62,30 @@ export default async function SorteoDetailPage({ params }: SorteoDetailPageProps
       href: method.href!,
       active: true
     }));
-  const rafflePaymentLinks = raffle.paymentLinks ?? [];
-  const activePaymentMethodsWithLink = rafflePaymentMethodsWithLink.length > 0
-    ? rafflePaymentMethodsWithLink
-    : rafflePaymentLinks.length > 0
-      ? rafflePaymentLinks
-      : paymentConfig.methods;
-  const activePaymentNote = raffle.paymentLinksNote ?? paymentConfig.note;
+
+  const activePaymentMethodsWithLink =
+    paymentLinks.length > 0
+      ? paymentLinks
+      : raffle.paymentLinks && raffle.paymentLinks.length > 0
+        ? raffle.paymentLinks
+        : paymentConfig.methods;
+
   const heroImage = toPublicImageSrc(raffle.imageUrl, "/logo.png");
-  const heroBadges = raffle.promoBadges && raffle.promoBadges.length > 0
-    ? raffle.promoBadges
-    : [
-        canParticipate ? "Sorteo activo" : "Resultado publicado",
-        raffle.isFree ? "Entrada gratis" : `Entrada ${formatMoney(raffle.entryFee)}`,
-        `${summary.metrics.availableNumbers} números disponibles`
-      ];
-  const prizeIncludes = raffle.prizeIncludes && raffle.prizeIncludes.length > 0
-    ? raffle.prizeIncludes
-    : [raffle.prize, "Sorteo transparente", "Soporte por WhatsApp"];
-  const heroBenefits = prizeIncludes.slice(0, 4);
-  const howToJoinItems = raffle.howToJoinItems && raffle.howToJoinItems.length > 0
-    ? raffle.howToJoinItems
-    : [
-        "Elige tu número favorito en el grid.",
-        raffle.isFree ? "Completa el formulario y confirma tus datos." : "Selecciona método de pago y envía comprobante si aplica.",
-        "Recibe validación de tu participación.",
-        "Sigue el countdown para el anuncio del ganador."
-      ];
-  const faqItems = raffle.faqItems && raffle.faqItems.length > 0
-    ? raffle.faqItems.slice(0, 5)
-    : [
-        {
-          question: "¿Quién puede participar?",
-          answer: "Solo usuarios registrados en la plataforma."
-        },
-        {
-          question: "¿Cómo sé si mi entrada fue validada?",
-          answer: "Tu entrada pasa a estado confirmado una vez validada por el equipo."
-        },
-        {
-          question: "¿Cómo se verifica el resultado?",
-          answer: "En la sección de verificación verás seed, hash y datos del draw."
-        }
-      ];
+  const heroTitle = raffle.title
+    ? `SORTEO ${raffle.title.toUpperCase()}`
+    : "SORTEO VIAJE A LAS VEGAS 2026";
+  const heroBullets = [
+    "Viaje para 2 personas",
+    "Hotel 3 noches",
+    "$500 para gastos"
+  ];
   const soldNumbers = summary.metrics.soldNumbers;
   const totalNumbers = summary.metrics.totalNumbers;
   const availableCount = summary.metrics.availableNumbers;
   const progressPercent = summary.metrics.progressPercent;
-  const urgencyLabel =
-    availableCount <= 12
-      ? `Solo quedan ${availableCount} números disponibles`
-      : progressPercent >= 60
-        ? `Más del ${progressPercent}% de los números ya están vendidos`
-        : "Participa temprano para elegir tu número ideal";
-
-  const heroTitle = raffle.title || "Viaje a Las Vegas para 2 personas";
-  const heroTitleClass = heroTitle.length > 54 ? `${styles.heroTitle} ${styles.heroTitleCompact}` : styles.heroTitle;
-  const heroSubtitle =
-    raffle.publicSubtitle?.trim() ||
-    "Memorial Weekend 2026 con vuelos, hotel y experiencia premium incluida.";
-
-  const showParticipants = participants.length > 0;
-  const eligibleNumbers = (
-    verification?.eligibleNumbers && verification.eligibleNumbers.length > 0
-      ? verification.eligibleNumbers
-      : soldOrWinnerNumbers.map((item) => item.numberValue)
-  )
-    .filter((value, index, array) => array.indexOf(value) === index)
-    .sort((a, b) => a - b);
-  const winnerDisplayName =
-    typeof raffle.winnerNumber === "number"
-      ? participants.find((item) => item.chosenNumber === raffle.winnerNumber)?.displayName ?? null
-      : null;
+  const faqItems = raffle.faqItems && raffle.faqItems.length > 0
+    ? raffle.faqItems.slice(0, 6)
+    : asFaqItems((raffle.drawPayloadJson ?? {}).faq_items).slice(0, 6);
 
   return (
     <main className="container section">
@@ -169,236 +102,58 @@ export default async function SorteoDetailPage({ params }: SorteoDetailPageProps
           <div className={styles.heroOverlay} />
           <div className={styles.heroContent}>
             <div className={styles.heroMain}>
-              <div className={styles.heroBadges}>
-                {heroBadges.map((badge, index) => (
-                  <span key={`${badge}-${index}`} className={styles.heroBadge}>{badge}</span>
-                ))}
-              </div>
-              <h1 className={heroTitleClass}>{heroTitle}</h1>
-              <p className={styles.heroSubtitle}>{heroSubtitle}</p>
-
-              <ul className={styles.heroBenefits}>
-                {heroBenefits.map((item) => (
+              <h1 className={styles.heroTitle}>{heroTitle}</h1>
+              <ul className={styles.heroBullets}>
+                {heroBullets.map((item) => (
                   <li key={item}>{item}</li>
                 ))}
               </ul>
-
               <div className={styles.heroActions}>
-                <a className="button-dark" href="#participar">
-                  {raffle.publicCtaLabel?.trim() || "Elegir mi número"}
-                </a>
-                <a className="button-outline" href="#numeros">Ver números disponibles</a>
-                <a className="button-outline" href="#verificacion">Verificar sorteo</a>
+                <a className="button-dark" href="#numeros">Elegir mi número</a>
               </div>
             </div>
 
             <aside className={styles.heroAside}>
               <p className={styles.heroAsideLabel}>Precio por número</p>
-              <p className={styles.heroPrice}>
-                {raffle.isFree ? "Gratis" : formatMoney(raffle.entryFee)}
-              </p>
-              <div className={styles.heroMetaGrid}>
-                <div>
-                  <span>Total</span>
-                  <strong>{totalNumbers}</strong>
-                </div>
-                <div>
-                  <span>Disponibles</span>
-                  <strong>{availableCount}</strong>
-                </div>
-                <div>
-                  <span>Vendidos</span>
-                  <strong>{soldNumbers}</strong>
-                </div>
-                <div>
-                  <span>Confirmados</span>
-                  <strong>{confirmedCount}</strong>
-                </div>
+              <p className={styles.heroPrice}>{raffle.isFree ? "Gratis" : formatMoney(raffle.entryFee)}</p>
+              <p className={styles.heroMeta}>Vendidos {soldNumbers} de {totalNumbers}</p>
+              <div className={styles.progressTrack} aria-label={`Progreso ${progressPercent}%`}>
+                <span style={{ width: `${Math.max(progressPercent, 2)}%` }} />
               </div>
-              <p className={styles.heroDate}>Anuncio del ganador: {formatDate(raffle.drawAt)}</p>
+              <p className={styles.urgency}>
+                {availableCount > 0 ? `Disponibles: ${availableCount}` : "Números agotados"}
+              </p>
             </aside>
           </div>
         </section>
 
-        <section className={`card ${styles.progressCard}`}>
-          <div className={styles.progressHead}>
-            <div>
-              <p className={styles.kicker}>Progreso del sorteo</p>
-              <h2>Vendidos {soldNumbers} de {totalNumbers} números</h2>
-            </div>
-            <p className={styles.progressPercent}>{progressPercent}%</p>
-          </div>
-          <div className={styles.progressTrack} aria-label={`Progreso ${progressPercent}%`}>
-            <span style={{ width: `${Math.max(progressPercent, 3)}%` }} />
-          </div>
-          <p className={styles.urgency}>{urgencyLabel}</p>
-        </section>
-
-        <RaffleCountdown
-          drawAt={raffle.drawAt}
-          drawnAt={raffle.drawnAt}
-          winnerNumber={raffle.winnerNumber}
-          availableNumbers={availableCount}
-          totalNumbers={totalNumbers}
-        />
-
-        <TombolaShell
-          raffleId={raffle.id}
-          title={raffle.title}
-          drawAt={raffle.drawAt}
-          drawnAt={raffle.drawnAt}
-          winnerNumber={raffle.winnerNumber}
-          winnerDisplayName={winnerDisplayName}
-          eligibleNumbers={eligibleNumbers}
-          verification={verification}
-          canRunDraw={isAdminRole(auth.role)}
-          liveHref={`/sorteos/${raffle.id}/live`}
-        />
-
-        <section className={styles.flowGrid}>
-          {[
-            "1. Ve el premio y elige tu número",
-            "2. Completa tus datos",
-            "3. Realiza el pago o confirma gratis",
-            "4. Recibe validación y sigue el draw"
-          ].map((step) => (
-            <article key={step} className={styles.flowCard}>
-              {step}
-            </article>
-          ))}
-        </section>
-
-        <div className={styles.twoCols}>
-          <section className="card">
-            <h3>Premio principal</h3>
-            <p className="muted">{raffle.description}</p>
-            <p><strong>Incluye:</strong></p>
-            <div className={styles.listBlock}>
-              {prizeIncludes.map((item) => (
-                <div key={item} className={styles.listItem}>{item}</div>
-              ))}
-            </div>
-            <p><strong>Ventana del viaje:</strong> {formatDate(raffle.startDate)} - {formatDate(raffle.endDate)}</p>
-          </section>
-
-          <section className="card">
-            <h3>Cómo participar</h3>
-            <div className={styles.listBlock}>
-              {howToJoinItems.map((item, index) => (
-                <div key={`${item}-${index}`} className={styles.listItem}>
-                  <strong>Paso {index + 1}.</strong> {item}
-                </div>
-              ))}
-            </div>
-            {raffle.urgencyMessage ? (
-              <p className={styles.urgencyMessage}>
-                <strong>Urgente:</strong> {raffle.urgencyMessage}
-              </p>
-            ) : null}
-          </section>
-        </div>
-
-        {!raffle.isFree && activePaymentMethodsWithLink.length > 0 ? (
-          <PaymentMethodLinks
-            methods={activePaymentMethodsWithLink}
-            note={activePaymentNote}
-            title="Métodos de pago disponibles"
+        {summary.publicNumbersVisibility && canParticipate ? (
+          <RaffleConversionFlow
+            raffleId={raffle.id}
+            isFree={raffle.isFree}
+            paymentInstructions={raffle.paymentInstructions}
+            paymentMethods={rafflePaymentMethods}
+            paymentLinks={activePaymentMethodsWithLink}
+            paymentNote={raffle.paymentLinksNote ?? paymentConfig.note}
+            initialAvailableNumbers={availableNumbers}
+            prefilledEmail={auth.email ?? undefined}
+            isAuthenticated={Boolean(auth.user)}
           />
-        ) : null}
-
-        {summary.publicNumbersVisibility ? (
-          <section id="numeros" className="card">
-            <h3>Números disponibles estilo lotería</h3>
-            <p className="muted">
-              Modo público: <strong>{summary.publicGridMode}</strong>
-            </p>
-            {summary.publicGridMode === "totals_only" ? (
-              <p className="muted">El administrador configuró visibilidad por totales únicamente.</p>
-            ) : (
-              <RaffleNumberGrid numbers={summary.numbers} />
-            )}
-          </section>
-        ) : null}
-
-        <div id="participar">
-          {canParticipate ? (
-            <RaffleEntryForm
-              raffleId={raffle.id}
-              isFree={raffle.isFree}
-              paymentInstructions={raffle.paymentInstructions}
-              paymentMethods={rafflePaymentMethods}
-              paymentLinks={activePaymentMethodsWithLink}
-              paymentNote={activePaymentNote}
-              initialAvailableNumbers={availableNumbers}
-              prefilledEmail={auth.email ?? undefined}
-              isAuthenticated={Boolean(auth.user)}
-            />
-          ) : (
-            <section className="card">
-              <h3>Participación cerrada</h3>
-              <p className="muted">Este sorteo ya cerró participaciones.</p>
-            </section>
-          )}
-        </div>
-
-        {showParticipants ? (
+        ) : (
           <section className="card">
-            <div className={styles.sectionHead}>
-              <h3>Participantes confirmados</h3>
-              <p className="muted">Prueba social en tiempo real (respeta privacidad configurada).</p>
-            </div>
-            <div className={styles.participantsGrid}>
-              {participants.slice(0, 120).map((participant) => (
-                <article key={participant.entryId} className={styles.participantCard}>
-                  <p>{participant.displayName}</p>
-                  <div className={styles.participantMeta}>
-                    {typeof participant.chosenNumber === "number" ? <span>#{participant.chosenNumber}</span> : null}
-                    <span>{participant.source === "offline" ? "Offline" : "Online"}</span>
-                  </div>
-                </article>
-              ))}
-            </div>
+            <h3>Participación cerrada</h3>
+            <p className="muted">Este sorteo no está aceptando participaciones en este momento.</p>
           </section>
-        ) : null}
+        )}
 
-        <RaffleVerificationPanel raffleId={raffle.id} initialVerification={verificationResult} showExplainer={false} />
-
-        <section className="card">
-          <h3>Preguntas frecuentes</h3>
-          <div className={styles.faqList}>
-            {faqItems.map((item, index) => (
-              <details key={`${item.question}-${index}`} className={styles.faqItem}>
-                <summary>{item.question}</summary>
-                <p className="muted">{item.answer}</p>
-              </details>
-            ))}
-          </div>
-        </section>
-
-        <section className={`card ${styles.finalCta}`}>
-          <div>
-            <p className={styles.kicker}>Último paso</p>
-            <h3>Participa hoy y asegura tu número</h3>
-            <p className="muted">
-              Premio: <strong>{raffle.prize}</strong> · Entrada:{" "}
-              <strong>{raffle.isFree ? "Gratis" : formatMoney(raffle.entryFee)}</strong> · Disponibles:{" "}
-              <strong>{availableCount}</strong>
-            </p>
-          </div>
-          <div className="button-row">
-            <a className="button-dark" href="#participar">Participar ahora</a>
-            <a className="button-outline" href={whatsappHref} target="_blank" rel="noreferrer">
-              Resolver dudas por WhatsApp
-            </a>
-            {!auth.user ? <Link className="button-outline" href="/registro">Crear cuenta</Link> : null}
-          </div>
-        </section>
+        <RaffleTransparencyAccordion raffleId={raffle.id} faqItems={faqItems} />
       </div>
 
       {canParticipate ? (
         <div className={styles.stickyCta}>
-          <a className="button-dark" href="#participar">Elegir número</a>
+          <a className="button-dark" href="#numeros">Elegir mi número</a>
           <a className="button-outline" href={whatsappHref} target="_blank" rel="noreferrer">WhatsApp</a>
+          {!auth.user ? <Link className="button-outline" href="/portal/login">Login</Link> : null}
         </div>
       ) : null}
     </main>

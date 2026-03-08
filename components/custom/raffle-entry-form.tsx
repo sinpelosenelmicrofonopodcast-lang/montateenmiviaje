@@ -17,6 +17,11 @@ interface RaffleEntryFormProps {
   initialAvailableNumbers: number[];
   prefilledEmail?: string;
   isAuthenticated?: boolean;
+  showNumberSelection?: boolean;
+  compact?: boolean;
+  selectedNumbers?: number[];
+  onSelectedNumbersChange?: (numbers: number[]) => void;
+  onEntriesCreated?: (numbers: number[]) => void;
 }
 
 function toProviderLabel(provider: string) {
@@ -32,7 +37,12 @@ export function RaffleEntryForm({
   paymentNote,
   initialAvailableNumbers,
   prefilledEmail,
-  isAuthenticated = false
+  isAuthenticated = false,
+  showNumberSelection = true,
+  compact = false,
+  selectedNumbers: selectedNumbersProp,
+  onSelectedNumbersChange,
+  onEntriesCreated
 }: RaffleEntryFormProps) {
   const [fullName, setFullName] = useState("");
   const [customerEmail, setCustomerEmail] = useState(prefilledEmail ?? "");
@@ -46,12 +56,23 @@ export function RaffleEntryForm({
   const [paymentScreenshotUrl, setPaymentScreenshotUrl] = useState("");
   const [uploadingProof, setUploadingProof] = useState(false);
   const [availableNumbers, setAvailableNumbers] = useState(initialAvailableNumbers);
-  const [chosenNumbers, setChosenNumbers] = useState<number[]>([]);
+  const [internalChosenNumbers, setInternalChosenNumbers] = useState<number[]>([]);
   const [numberQuery, setNumberQuery] = useState("");
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const chosenNumbers = selectedNumbersProp ?? internalChosenNumbers;
+
+  function setChosenNumbers(next: number[] | ((current: number[]) => number[])) {
+    const resolved = typeof next === "function" ? next(chosenNumbers) : next;
+    if (onSelectedNumbersChange) {
+      onSelectedNumbersChange(resolved);
+      return;
+    }
+    setInternalChosenNumbers(resolved);
+  }
 
   useEffect(() => {
     if (prefilledEmail) {
@@ -192,8 +213,10 @@ export function RaffleEntryForm({
           payload.entries.map((item) => `#${item.chosenNumber}`).join(", ")
         }. Estado: ${payload.entry?.status ?? payload.entries[0].status}.`
       );
+      const submittedNumbers = [...chosenNumbers];
       setAvailableNumbers((current) => current.filter((number) => !chosenNumbers.includes(number)));
       setChosenNumbers([]);
+      onEntriesCreated?.(submittedNumbers);
       setPaymentReference("");
       setPaymentScreenshotUrl("");
       setNote("");
@@ -214,28 +237,33 @@ export function RaffleEntryForm({
 
   return (
     <form className={`card ${styles.form}`} onSubmit={handleJoin}>
-      <div className={styles.header}>
-        <p className={styles.eyebrow}>Participación oficial</p>
-        <h3 className={styles.title}>Completa tu entrada en minutos</h3>
-        <p className={styles.subtitle}>
-          Flujo rápido: elige número, confirma datos y completa pago según el método disponible.
-        </p>
-      </div>
-
-      <div className={styles.loginStrip}>
-        {isAuthenticated ? (
-          <p>
-            Sesión activa detectada. Usa este mismo email para validar tu participación.
+      {!compact ? (
+        <div className={styles.header}>
+          <p className={styles.eyebrow}>Participación oficial</p>
+          <h3 className={styles.title}>Completa tu entrada en minutos</h3>
+          <p className={styles.subtitle}>
+            Flujo rápido: elige número, confirma datos y completa pago según el método disponible.
           </p>
-        ) : (
-          <p>
-            Debes estar registrado para participar.{" "}
-            <Link href="/portal/login">Inicia sesión</Link> o{" "}
-            <Link href="/registro">crea tu cuenta</Link>.
-          </p>
-        )}
-      </div>
+        </div>
+      ) : null}
 
+      {compact ? null : (
+        <div className={styles.loginStrip}>
+          {isAuthenticated ? (
+            <p>
+              Sesión activa detectada. Usa este mismo email para validar tu participación.
+            </p>
+          ) : (
+            <p>
+              Debes estar registrado para participar.{" "}
+              <Link href="/portal/login">Inicia sesión</Link> o{" "}
+              <Link href="/registro">crea tu cuenta</Link>.
+            </p>
+          )}
+        </div>
+      )}
+
+      {showNumberSelection ? (
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
           <h4>1) Elige tu número</h4>
@@ -301,10 +329,11 @@ export function RaffleEntryForm({
           </p>
         ) : null}
       </section>
+      ) : null}
 
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
-          <h4>2) Tus datos</h4>
+          <h4>{showNumberSelection ? "2) Tus datos" : "Tus datos"}</h4>
           <p>Campos principales para validar tu entrada.</p>
         </div>
         <div className={styles.fieldGrid}>
@@ -337,14 +366,16 @@ export function RaffleEntryForm({
             />
           </label>
         </div>
-        <button
-          type="button"
-          className="button-outline"
-          onClick={() => setShowAdvancedFields((value) => !value)}
-        >
-          {showAdvancedFields ? "Ocultar campos opcionales" : "Mostrar campos opcionales"}
-        </button>
-        {showAdvancedFields ? (
+        {!compact ? (
+          <button
+            type="button"
+            className="button-outline"
+            onClick={() => setShowAdvancedFields((value) => !value)}
+          >
+            {showAdvancedFields ? "Ocultar campos opcionales" : "Mostrar campos opcionales"}
+          </button>
+        ) : null}
+        {showAdvancedFields && !compact ? (
           <div className={styles.fieldGrid} style={{ marginTop: "10px" }}>
             <label>
               Nombre público (opcional)
@@ -369,14 +400,16 @@ export function RaffleEntryForm({
           </div>
         ) : null}
 
-        <label className={styles.checkboxRow}>
-          <input
-            type="checkbox"
-            checked={consentPublicListing}
-            onChange={(event) => setConsentPublicListing(event.target.checked)}
-          />
-          Permito aparecer en la lista pública de participantes (sin exponer email/teléfono).
-        </label>
+        {!compact ? (
+          <label className={styles.checkboxRow}>
+            <input
+              type="checkbox"
+              checked={consentPublicListing}
+              onChange={(event) => setConsentPublicListing(event.target.checked)}
+            />
+            Permito aparecer en la lista pública de participantes (sin exponer email/teléfono).
+          </label>
+        ) : null}
       </section>
 
       {!isFree ? (
@@ -385,7 +418,7 @@ export function RaffleEntryForm({
             <h4>3) Método de pago</h4>
             <p>Selecciona cómo pagar y sigue instrucciones.</p>
           </div>
-          <p className={styles.instructions}><strong>Instrucciones:</strong> {paymentInstructions}</p>
+          {compact ? null : <p className={styles.instructions}><strong>Instrucciones:</strong> {paymentInstructions}</p>}
           {enabledPaymentMethods.length > 0 ? (
             <div className={styles.paymentMethodGrid}>
               {enabledPaymentMethods.map((method) => (
@@ -466,13 +499,15 @@ export function RaffleEntryForm({
 
       <div className={styles.submitRow}>
         <button className="button-dark" type="submit" disabled={loading || noNumbersLeft}>
-          {loading ? "Enviando..." : noNumbersLeft ? "Números agotados" : `Confirmar ${Math.max(chosenNumbers.length, 1)} número(s)`}
+          {loading ? "Enviando..." : noNumbersLeft ? "Números agotados" : compact ? "Confirmar participación" : `Confirmar ${Math.max(chosenNumbers.length, 1)} número(s)`}
         </button>
       </div>
 
-      <p className={styles.trustCopy}>
-        Tu entrada se procesa con validación de número y registro auditable. Recibirás confirmación una vez sea revisada.
-      </p>
+      {compact ? null : (
+        <p className={styles.trustCopy}>
+          Tu entrada se procesa con validación de número y registro auditable. Recibirás confirmación una vez sea revisada.
+        </p>
+      )}
 
       {success ? <p className="success">{success}</p> : null}
       {error ? <p className="error">{error}</p> : null}
