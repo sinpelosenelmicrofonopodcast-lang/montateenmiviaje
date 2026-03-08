@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { listRaffleAdminLogsService } from "@/lib/raffles-service";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  await requireAdminServerAccess();
   try {
     const { id } = await params;
     const { searchParams } = new URL(request.url);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { updateRaffleEntryStatusService } from "@/lib/raffles-service";
 
 const schema = z.object({
@@ -10,6 +11,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ entryId: string }> }
 ) {
+  await requireAdminServerAccess();
   try {
     const { entryId } = await params;
     const payload = schema.parse(await request.json());

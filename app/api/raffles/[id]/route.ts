@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
+import type { Raffle } from "@/lib/types";
 import {
   getRaffleByIdService,
   getRafflePublicSummaryService,
   getRaffleVerificationPayloadService,
   listAvailableRaffleNumbersService,
-  listPublicRaffleParticipantsService,
-  listRaffleEntriesService
+  listPublicRaffleParticipantsService
 } from "@/lib/raffles-service";
+
+function sanitizePublicRaffle(raffle: Raffle) {
+  return {
+    ...raffle,
+    drawSecret: undefined,
+    drawPayloadJson: undefined
+  };
+}
 
 export async function GET(
   _request: Request,
@@ -29,13 +37,12 @@ export async function GET(
       getRaffleVerificationPayloadService(id)
     ]);
 
-    const entries = await listRaffleEntriesService(id);
     const availableNumbers = (await listAvailableRaffleNumbersService(id)) ?? [];
-    const confirmedEntriesCount = entries.filter((entry) => entry.status === "confirmed").length;
+    const confirmedEntriesCount = summary.metrics.confirmedEntries;
 
     return NextResponse.json({
-      raffle,
-      entriesCount: entries.length,
+      raffle: sanitizePublicRaffle(raffle),
+      entriesCount: confirmedEntriesCount,
       confirmedEntriesCount,
       availableNumbersCount: availableNumbers.length,
       availableNumbers,

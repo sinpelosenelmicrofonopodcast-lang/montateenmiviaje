@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { isAdminRole } from "@/lib/admin-auth";
 import { getServerAuthContext } from "@/lib/admin-guard";
@@ -53,7 +54,7 @@ export async function SiteHeader() {
       <div className="container nav-shell">
         <div className="brand-row">
           <Link href="/" className="brand" aria-label="Ir al inicio">
-            <img src={logoUrl} alt={siteName} width={64} height={64} className="brand-logo" />
+            <Image src={logoUrl} alt={siteName} width={64} height={64} className="brand-logo" unoptimized priority />
             <span className="brand-name">{siteName}</span>
           </Link>
         </div>

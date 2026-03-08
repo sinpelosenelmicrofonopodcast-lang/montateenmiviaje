@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toPublicImageSrc } from "@/lib/image-url";
 import { Raffle, RaffleEntry, RaffleNumber, RafflePayment, RafflePaymentMethodConfig } from "@/lib/types";
 
@@ -58,6 +58,17 @@ function toLocalDateTime(value?: string) {
 
 function yesNo(value: boolean | undefined) {
   return value ? "Sí" : "No";
+}
+
+function getRaffleLifecycleLabel(raffle: Raffle) {
+  if (raffle.isLegacy || raffle.verificationMode === "none") return "Legacy";
+  if (raffle.verificationStatus === "verified") return "Verificado";
+  if (raffle.verificationStatus === "winner_published") return "Ganador publicado";
+  if (raffle.drawnAt) return "Sorteado";
+  if (raffle.verificationStatus === "sales_closed" || raffle.status === "closed") return "Ventas cerradas";
+  if (raffle.verificationStatus === "prepared") return "Listo para sortear";
+  if (raffle.status === "published") return "Activo";
+  return "Borrador";
 }
 
 type PaymentMethodDraft = RafflePaymentMethodConfig;
@@ -235,6 +246,7 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const [drawingId, setDrawingId] = useState<string | null>(null);
   const [liveVerification, setLiveVerification] = useState<Record<string, unknown> | null>(null);
+  const snapshotAbortRef = useRef<AbortController | null>(null);
 
   const raffleTitleMap = useMemo(() => {
     const mapped = new Map<string, string>();
@@ -358,23 +370,43 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
       return;
     }
 
+    if (snapshotAbortRef.current) {
+      snapshotAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    snapshotAbortRef.current = controller;
+
     setLoadingSnapshot(true);
     try {
-      const response = await fetch(`/api/admin/raffles?raffleId=${selectedRaffleId}`, { cache: "no-store" });
+      const response = await fetch(`/api/admin/raffles?raffleId=${selectedRaffleId}`, {
+        cache: "no-store",
+        signal: controller.signal
+      });
       const payload = (await response.json()) as SnapshotResponse & { message?: string };
       if (!response.ok || !payload.snapshot) {
         throw new Error(payload.message ?? "No se pudo cargar el snapshot de rifa");
       }
 
+      if (controller.signal.aborted) {
+        return;
+      }
       setSnapshot(payload.snapshot);
       setSelectedNumbers([]);
       setLiveVerification(null);
       syncSettingsFromRaffle(payload.snapshot.raffle);
     } catch (snapshotError) {
+      if (snapshotError instanceof Error && snapshotError.name === "AbortError") {
+        return;
+      }
       setError(snapshotError instanceof Error ? snapshotError.message : "No se pudo cargar snapshot");
       setSnapshot(null);
     } finally {
-      setLoadingSnapshot(false);
+      if (snapshotAbortRef.current === controller) {
+        snapshotAbortRef.current = null;
+      }
+      if (!controller.signal.aborted) {
+        setLoadingSnapshot(false);
+      }
     }
   }
 
@@ -382,6 +414,14 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
     void refreshSnapshot();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRaffleId]);
+
+  useEffect(() => {
+    return () => {
+      if (snapshotAbortRef.current) {
+        snapshotAbortRef.current.abort();
+      }
+    };
+  }, []);
 
   async function handleBannerUpload(file: File) {
     setUploadingBanner(true);
@@ -602,6 +642,41 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
     } finally {
       setDrawingId(null);
     }
+  }
+
+  async function runRaffleAction(
+    raffleId: string,
+    path: "prepare" | "close-sales" | "publish" | "verify",
+    successMessage: string
+  ) {
+    setFeedback(null);
+    setError(null);
+
+    const method = path === "verify" ? "GET" : "POST";
+    const response = await fetch(`/api/admin/raffles/${raffleId}/${path}`, { method });
+    const payload = (await response.json()) as { message?: string; verification?: Record<string, unknown> };
+    if (!response.ok) {
+      setError(payload.message ?? "No se pudo ejecutar la acción");
+      return;
+    }
+    await refreshBase();
+    if (selectedRaffleId === raffleId) {
+      await refreshSnapshot();
+    }
+    if (payload.verification) {
+      setLiveVerification(payload.verification);
+    }
+    setFeedback(successMessage);
+  }
+
+  async function runLiveAction(path: "prepare" | "close-sales" | "publish" | "verify", successMessage: string) {
+    if (!snapshot) return;
+    await runRaffleAction(snapshot.raffle.id, path, successMessage);
+  }
+
+  function downloadCertificate() {
+    if (!snapshot) return;
+    window.open(`/api/admin/raffles/${snapshot.raffle.id}/certificate`, "_blank", "noopener,noreferrer");
   }
 
   async function executeBulkAction() {
@@ -988,7 +1063,7 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
                   <td>{raffle.title}</td>
                   <td>{raffle.isFree ? "Gratis" : raffle.entryFee}</td>
                   <td>{raffle.numberPoolSize}</td>
-                  <td>{raffle.status}</td>
+                  <td>{getRaffleLifecycleLabel(raffle)}</td>
                   <td>{new Date(raffle.drawAt).toLocaleString("es-ES")}</td>
                   <td>{raffle.winnerNumber ? `#${raffle.winnerNumber}` : "-"}</td>
                   <td>
@@ -1005,6 +1080,14 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
                         }
                       >
                         {raffle.drawnAt ? "Finalizado" : raffle.status === "published" ? "Cerrar" : "Publicar"}
+                      </button>
+                      <button
+                        className="button-outline"
+                        type="button"
+                        disabled={Boolean(raffle.drawnAt) || raffle.status === "draft"}
+                        onClick={() => void runRaffleAction(raffle.id, "prepare", "Commit generado y rifa preparada.")}
+                      >
+                        Preparar
                       </button>
                       <button
                         className="button-dark"
@@ -1301,8 +1384,26 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
 
           {snapshot && activeTab === "live" ? (
             <>
-              <p className="muted">Draw verificable y transparente. El sorteo usa payload hash + seed pública.</p>
+              <p className="muted">
+                Flujo recomendado: preparar commit → cerrar ventas → ejecutar draw → publicar ganador.
+              </p>
               <div className="button-row">
+                <button
+                  className="button-outline"
+                  type="button"
+                  disabled={Boolean(snapshot.raffle.drawnAt) || snapshot.raffle.status === "draft"}
+                  onClick={() => void runLiveAction("prepare", "Commit generado correctamente.")}
+                >
+                  Preparar sorteo
+                </button>
+                <button
+                  className="button-outline"
+                  type="button"
+                  disabled={Boolean(snapshot.raffle.drawnAt)}
+                  onClick={() => void runLiveAction("close-sales", "Ventas cerradas para esta rifa.")}
+                >
+                  Cerrar ventas
+                </button>
                 <button
                   className="button-dark"
                   type="button"
@@ -1311,10 +1412,30 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
                 >
                   {snapshot.raffle.drawnAt ? "Sorteado" : drawingId === snapshot.raffle.id ? "Sorteando..." : "Iniciar draw"}
                 </button>
+                <button
+                  className="button-outline"
+                  type="button"
+                  disabled={!snapshot.raffle.drawnAt}
+                  onClick={() => void runLiveAction("publish", "Ganador publicado oficialmente.")}
+                >
+                  Publicar ganador
+                </button>
+                <button className="button-outline" type="button" onClick={() => void runLiveAction("verify", "Verificación recalculada.")}>
+                  Verificar integridad
+                </button>
+                <button className="button-outline" type="button" onClick={downloadCertificate}>
+                  Exportar acta
+                </button>
+                <a className="button-outline" href={`/sorteos/${snapshot.raffle.id}/live`} target="_blank" rel="noreferrer">
+                  Abrir live fullscreen
+                </a>
               </div>
+              <p><strong>Estado:</strong> {getRaffleLifecycleLabel(snapshot.raffle)}</p>
               <p><strong>Draw at:</strong> {new Date(snapshot.raffle.drawAt).toLocaleString("es-ES")}</p>
+              <p><strong>Sales closed:</strong> {snapshot.raffle.salesClosedAt ? new Date(snapshot.raffle.salesClosedAt).toLocaleString("es-ES") : "Pendiente"}</p>
               <p><strong>Drawn at:</strong> {snapshot.raffle.drawnAt ? new Date(snapshot.raffle.drawnAt).toLocaleString("es-ES") : "Pendiente"}</p>
               <p><strong>Winner:</strong> {snapshot.raffle.winnerNumber ? `#${snapshot.raffle.winnerNumber}` : "-"}</p>
+              <p><strong>Verification:</strong> {snapshot.raffle.verificationStatus ?? "pending"}</p>
               {liveVerification ? (
                 <pre className="card" style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(liveVerification, null, 2)}</pre>
               ) : null}

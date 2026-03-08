@@ -393,6 +393,16 @@ export interface EmailLog {
 }
 
 export type RaffleStatus = "draft" | "published" | "closed";
+export type RaffleVerificationStatus =
+  | "pending"
+  | "prepared"
+  | "sales_closed"
+  | "drawn"
+  | "winner_published"
+  | "verified"
+  | "legacy"
+  | "cancelled"
+  | "failed";
 export type RaffleParticipantsMode = "hidden" | "name_only" | "name_number" | "masked";
 export type RaffleNumberGridMode = "full" | "available_only" | "sold_only" | "totals_only";
 export type RaffleVerificationMode = "none" | "commit_reveal";
@@ -483,6 +493,15 @@ export interface Raffle {
   liveDrawEnabled?: boolean;
   paymentLinks?: RafflePaymentLink[];
   paymentLinksNote?: string;
+  verificationVersion?: string;
+  verificationStatus?: RaffleVerificationStatus;
+  drawHash?: string;
+  drawSecret?: string;
+  winningIndex?: number;
+  totalTickets?: number;
+  salesClosedAt?: string;
+  winnerPublishedAt?: string;
+  isLegacy?: boolean;
   updatedAt?: string;
   createdAt: string;
 }

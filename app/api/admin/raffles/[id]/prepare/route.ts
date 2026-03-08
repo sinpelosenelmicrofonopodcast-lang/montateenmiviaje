@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
 import { requireAdminServerAccess } from "@/lib/admin-guard";
-import { verifyRaffleDrawService } from "@/lib/raffles-service";
+import { prepareVerifiedRaffleService, verifyRaffleDrawService } from "@/lib/raffles-service";
 
-export async function GET(
+export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await requireAdminServerAccess();
+  const auth = await requireAdminServerAccess();
   try {
     const { id } = await params;
+    const raffle = await prepareVerifiedRaffleService(id, auth.user?.id);
     const verification = await verifyRaffleDrawService(id);
-    return NextResponse.json({ verification });
+    return NextResponse.json({ ok: true, raffle, verification });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Error interno";
-    return NextResponse.json({ message }, { status: 500 });
+    return NextResponse.json({ message }, { status: 400 });
   }
 }

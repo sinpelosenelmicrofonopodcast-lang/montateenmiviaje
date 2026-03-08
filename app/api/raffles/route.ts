@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import type { Raffle } from "@/lib/types";
 import { enterRaffleService, listRafflesService } from "@/lib/raffles-service";
 
 const joinSchema = z.object({
@@ -16,10 +17,18 @@ const joinSchema = z.object({
   phone: z.string().max(50).optional()
 });
 
+function sanitizePublicRaffle(raffle: Raffle) {
+  return {
+    ...raffle,
+    drawSecret: undefined,
+    drawPayloadJson: undefined
+  };
+}
+
 export async function GET() {
   try {
     const raffles = await listRafflesService({ includeClosed: true });
-    return NextResponse.json({ raffles });
+    return NextResponse.json({ raffles: raffles.map(sanitizePublicRaffle) });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Error interno";
     return NextResponse.json({ message }, { status: 500 });

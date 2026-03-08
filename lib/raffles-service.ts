@@ -21,6 +21,9 @@ import {
 } from "@/lib/types";
 
 const MANUAL_PAYMENT_METHODS: RaffleManualPaymentMethod[] = ["paypal", "zelle", "cashapp", "ath_movil", "cash", "venmo", "other"];
+const DUE_DRAW_SCAN_INTERVAL_MS = 30_000;
+let lastDueDrawScanAt = 0;
+let dueDrawScanInFlight: Promise<void> | null = null;
 
 export interface RegisterCustomerInput {
   fullName?: string;
@@ -151,18 +154,43 @@ export interface RafflePublicSummary {
 
 export interface RaffleVerificationPayload {
   raffleId: string;
+  verificationVersion?: string;
   algorithm: RaffleDrawAlgorithm;
   verificationMode: RaffleVerificationMode;
+  verificationStatus?: string;
   drawAt: string;
   drawnAt?: string;
+  salesClosedAt?: string;
+  winnerPublishedAt?: string;
   publicSeed?: string;
   commitHash?: string;
   revealSecret?: string;
   eligibleNumbers: number[];
+  totalTickets?: number;
   hashInput?: string;
   drawHash?: string;
+  winningIndex?: number;
   winnerNumber?: number;
   winnerEntryId?: string;
+  isLegacy?: boolean;
+}
+
+export interface RaffleVerificationResult {
+  verified: boolean;
+  reason?: string;
+  status: "pending" | "verified" | "failed" | "legacy";
+  checks: {
+    commit: boolean;
+    drawHash: boolean;
+    winner: boolean;
+    payloadComplete: boolean;
+  };
+  computed?: {
+    drawHash?: string;
+    winningIndex?: number;
+    winnerNumber?: number;
+  };
+  payload: RaffleVerificationPayload;
 }
 
 export interface RaffleAdminLog {
@@ -227,6 +255,15 @@ interface AppRaffleRow {
   secret_commit_hash?: string | null;
   draw_algorithm?: RaffleDrawAlgorithm | null;
   draw_payload_json?: Record<string, unknown> | null;
+  verification_version?: string | null;
+  verification_status?: string | null;
+  draw_secret?: string | null;
+  draw_hash?: string | null;
+  winning_index?: number | null;
+  total_tickets?: number | null;
+  sales_closed_at?: string | null;
+  winner_published_at?: string | null;
+  is_legacy?: boolean | null;
   referral_enabled?: boolean | null;
   viral_counter_enabled?: boolean | null;
   urgency_message?: string | null;
@@ -365,6 +402,36 @@ function mapRaffle(row: AppRaffleRow): Raffle {
     secretCommitHash: row.secret_commit_hash ?? undefined,
     drawAlgorithm: row.draw_algorithm ?? "sha256-modulo-v1",
     drawPayloadJson: drawPayload,
+    verificationVersion:
+      row.verification_version ??
+      (typeof drawPayload.verification_version === "string" ? drawPayload.verification_version : "sha256-modulo-v1"),
+    verificationStatus:
+      (row.verification_status as Raffle["verificationStatus"]) ??
+      (typeof drawPayload.verification_status === "string"
+        ? (drawPayload.verification_status as Raffle["verificationStatus"])
+        : undefined) ??
+      (row.drawn_at ? "drawn" : "pending"),
+    drawSecret:
+      row.draw_secret ??
+      (typeof drawPayload.draw_secret === "string" ? drawPayload.draw_secret : undefined),
+    drawHash:
+      row.draw_hash ??
+      (typeof drawPayload.draw_hash === "string" ? drawPayload.draw_hash : undefined),
+    winningIndex:
+      row.winning_index ??
+      (typeof drawPayload.winning_index === "number" ? drawPayload.winning_index : undefined),
+    totalTickets:
+      row.total_tickets ??
+      (typeof drawPayload.total_tickets === "number" ? drawPayload.total_tickets : undefined),
+    salesClosedAt:
+      row.sales_closed_at ??
+      (typeof drawPayload.sales_closed_at === "string" ? drawPayload.sales_closed_at : undefined),
+    winnerPublishedAt:
+      row.winner_published_at ??
+      (typeof drawPayload.winner_published_at === "string" ? drawPayload.winner_published_at : undefined),
+    isLegacy:
+      row.is_legacy ??
+      (typeof drawPayload.is_legacy === "boolean" ? drawPayload.is_legacy : false),
     publicSubtitle: contentConfig.publicSubtitle,
     publicCtaLabel: contentConfig.publicCtaLabel,
     promoBadges: contentConfig.promoBadges,
@@ -723,6 +790,39 @@ function hashSha256(input: string) {
   return createHash("sha256").update(input).digest("hex");
 }
 
+function winnerIndexFromHash(drawHash: string, totalTickets: number) {
+  if (!drawHash || totalTickets <= 0) {
+    return null;
+  }
+  const safeTotal = BigInt(totalTickets);
+  const bigintHash = BigInt(`0x${drawHash}`);
+  return Number(bigintHash % safeTotal);
+}
+
+function normalizeEligibleNumbers(values: number[]) {
+  return values
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0)
+    .filter((value, index, list) => list.indexOf(value) === index)
+    .sort((a, b) => a - b);
+}
+
+function buildDrawHashInput(input: {
+  drawSecret: string;
+  raffleId: string;
+  closeTimestamp: string;
+  totalTickets: number;
+}) {
+  return `${input.drawSecret}:${input.raffleId}:${input.closeTimestamp}:${input.totalTickets}`;
+}
+
+function asRecord(value: unknown) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
 function toPublicDisplayName(entry: RaffleEntry, mode: RaffleParticipantsMode) {
   const source = entry.publicDisplayName || entry.customerEmail;
   const [first = "Participante", second = ""] = source.split(" ");
@@ -956,100 +1056,142 @@ async function drawRaffleWinnerSupabase(
     throw new Error(`No se pudieron cargar números elegibles: ${numberRowsResult.error.message}`);
   }
 
-  const eligibleNumbers = (numberRowsResult.data ?? []).map((row) => row.number_value);
+  const eligibleNumbers = normalizeEligibleNumbers((numberRowsResult.data ?? []).map((row) => row.number_value));
 
   let winnerEntry: AppRaffleEntryRow | null = null;
   let winnerNumber: number | null = null;
-  let drawPayloadJson: Record<string, unknown> = { ...(raffle.draw_payload_json ?? {}) };
+  let winnerIndex: number | null = null;
 
-  if (eligibleNumbers.length > 0) {
-    const previousPayload = raffle.draw_payload_json ?? {};
-    const publicSeed = raffle.public_seed ?? String(previousPayload.public_seed ?? randomUUID().replace(/-/g, "").slice(0, 24));
-    const revealSecret = String(previousPayload.reveal_secret ?? randomUUID().replace(/-/g, "").slice(0, 32));
-    const commitHash = hashSha256(`${publicSeed}:${revealSecret}`);
-    const drawTimestamp = now.toISOString();
-    const hashInput = `${publicSeed}|${revealSecret}|${drawTimestamp}|${eligibleNumbers.join(",")}`;
-    const drawHash = hashSha256(hashInput);
-    const winnerIndex = Number(BigInt(`0x${drawHash.slice(0, 15)}`) % BigInt(eligibleNumbers.length));
+  const previousPayload = asRecord(raffle.draw_payload_json);
+  const drawTimestamp = now.toISOString();
+  const salesClosedAt =
+    (typeof previousPayload.sales_closed_at === "string" && previousPayload.sales_closed_at) ||
+    raffle.sales_closed_at ||
+    drawTimestamp;
+  const verificationMode = raffle.verification_mode ?? "commit_reveal";
+  const publicSeed = (raffle.public_seed ?? asNonEmptyString(previousPayload.public_seed)) || randomUUID().replace(/-/g, "").slice(0, 24);
+  const drawSecret = (raffle.draw_secret ?? asNonEmptyString(previousPayload.draw_secret)) || randomUUID().replace(/-/g, "");
+  const commitHash = (raffle.secret_commit_hash ?? asNonEmptyString(previousPayload.commit_hash)) || hashSha256(drawSecret);
+  const totalTickets = eligibleNumbers.length;
+  const hashInput = totalTickets > 0
+    ? buildDrawHashInput({
+        drawSecret,
+        raffleId,
+        closeTimestamp: salesClosedAt,
+        totalTickets
+      })
+    : undefined;
+  const drawHash = hashInput ? hashSha256(hashInput) : undefined;
+  winnerIndex = drawHash ? winnerIndexFromHash(drawHash, totalTickets) : null;
+  winnerNumber = winnerIndex !== null ? eligibleNumbers[winnerIndex] ?? null : null;
 
-    winnerNumber = eligibleNumbers[winnerIndex] ?? null;
-
-    if (winnerNumber !== null) {
-      const winnerLookup = await supabase
-        .from("app_raffle_numbers")
-        .select("entry_id")
-        .eq("raffle_id", raffleId)
-        .eq("number_value", winnerNumber)
-        .maybeSingle<{ entry_id: string | null }>();
-
-      if (winnerLookup.error) {
-        throw new Error(`No se pudo resolver entrada ganadora: ${winnerLookup.error.message}`);
-      }
-
-      if (winnerLookup.data?.entry_id) {
-        const entry = await getEntryById(winnerLookup.data.entry_id);
-        winnerEntry = entry;
-      }
-    }
-
-    drawPayloadJson = {
-      ...previousPayload,
-      verification_mode: raffle.verification_mode ?? "commit_reveal",
-      algorithm: raffle.draw_algorithm ?? "sha256-modulo-v1",
-      public_seed: publicSeed,
-      reveal_secret: revealSecret,
-      commit_hash: commitHash,
-      draw_timestamp: drawTimestamp,
-      eligible_numbers: eligibleNumbers,
-      hash_input: hashInput,
-      draw_hash: drawHash,
-      winner_index: winnerIndex,
-      winner_number: winnerNumber,
-      winner_entry_id: winnerEntry?.id ?? null
-    };
-
-    const resetWinner = await supabase
+  if (winnerNumber !== null) {
+    const winnerLookup = await supabase
       .from("app_raffle_numbers")
-      .update({ status: "sold", updated_at: drawTimestamp })
+      .select("entry_id")
       .eq("raffle_id", raffleId)
-      .eq("status", "winner");
+      .eq("number_value", winnerNumber)
+      .maybeSingle<{ entry_id: string | null }>();
 
-    if (resetWinner.error) {
-      throw new Error(`No se pudo resetear estado de ganador anterior: ${resetWinner.error.message}`);
+    if (winnerLookup.error) {
+      throw new Error(`No se pudo resolver entrada ganadora: ${winnerLookup.error.message}`);
     }
 
-    if (winnerNumber !== null) {
-      const markWinner = await supabase
-        .from("app_raffle_numbers")
-        .update({ status: "winner", updated_at: drawTimestamp })
-        .eq("raffle_id", raffleId)
-        .eq("number_value", winnerNumber);
-
-      if (markWinner.error) {
-        throw new Error(`No se pudo marcar número ganador: ${markWinner.error.message}`);
-      }
+    if (winnerLookup.data?.entry_id) {
+      const entry = await getEntryById(winnerLookup.data.entry_id);
+      winnerEntry = entry;
     }
   }
 
-  const updatePayload = {
-    status: "closed" as const,
-    drawn_at: now.toISOString(),
+  const drawPayloadJson: Record<string, unknown> = {
+    ...previousPayload,
+    verification_version: "sha256-modulo-v1",
+    verification_status: "drawn",
+    verification_mode: verificationMode,
+    algorithm: raffle.draw_algorithm ?? "sha256-modulo-v1",
+    public_seed: publicSeed,
+    commit_hash: commitHash,
+    draw_secret: drawSecret,
+    sales_closed_at: salesClosedAt,
+    draw_timestamp: drawTimestamp,
+    total_tickets: totalTickets,
+    eligible_numbers: eligibleNumbers,
+    hash_input: hashInput ?? null,
+    draw_hash: drawHash ?? null,
+    winner_index: winnerIndex,
+    winner_number: winnerNumber,
+    winner_entry_id: winnerEntry?.id ?? null,
+    is_legacy: verificationMode !== "commit_reveal"
+  };
+
+  const resetWinner = await supabase
+    .from("app_raffle_numbers")
+    .update({ status: "sold", updated_at: drawTimestamp })
+    .eq("raffle_id", raffleId)
+    .eq("status", "winner");
+
+  if (resetWinner.error) {
+    throw new Error(`No se pudo resetear estado de ganador anterior: ${resetWinner.error.message}`);
+  }
+
+  if (winnerNumber !== null) {
+    const markWinner = await supabase
+      .from("app_raffle_numbers")
+      .update({ status: "winner", updated_at: drawTimestamp })
+      .eq("raffle_id", raffleId)
+      .eq("number_value", winnerNumber);
+
+    if (markWinner.error) {
+      throw new Error(`No se pudo marcar número ganador: ${markWinner.error.message}`);
+    }
+  }
+
+  const updatePayload: Record<string, unknown> = {
+    status: "closed",
+    drawn_at: drawTimestamp,
     winner_entry_id: winnerEntry?.id ?? null,
     winner_number: winnerNumber,
     winner_customer_email: winnerEntry?.customer_email ?? null,
-    public_seed: drawPayloadJson.public_seed ?? raffle.public_seed ?? null,
-    secret_commit_hash: drawPayloadJson.commit_hash ?? raffle.secret_commit_hash ?? null,
+    public_seed: publicSeed,
+    secret_commit_hash: commitHash,
     draw_payload_json: drawPayloadJson,
-    updated_at: now.toISOString()
+    draw_hash: drawHash ?? null,
+    winning_index: winnerIndex,
+    total_tickets: totalTickets,
+    draw_secret: drawSecret,
+    verification_version: "sha256-modulo-v1",
+    verification_status: "drawn",
+    sales_closed_at: salesClosedAt,
+    is_legacy: verificationMode !== "commit_reveal",
+    updated_at: drawTimestamp
   };
 
-  const update = await supabase
+  let update = await supabase
     .from("app_raffles")
     .update(updatePayload)
     .eq("id", raffleId)
     .is("drawn_at", null)
     .select("*")
     .single<AppRaffleRow>();
+
+  if (update.error && (update.error.code === "42703" || /column .* does not exist/i.test(update.error.message))) {
+    delete updatePayload.draw_hash;
+    delete updatePayload.winning_index;
+    delete updatePayload.total_tickets;
+    delete updatePayload.draw_secret;
+    delete updatePayload.verification_version;
+    delete updatePayload.verification_status;
+    delete updatePayload.sales_closed_at;
+    delete updatePayload.is_legacy;
+
+    update = await supabase
+      .from("app_raffles")
+      .update(updatePayload)
+      .eq("id", raffleId)
+      .is("drawn_at", null)
+      .select("*")
+      .single<AppRaffleRow>();
+  }
 
   if (update.error || !update.data) {
     throw new Error(`Error cerrando sorteo: ${update.error?.message ?? "sin datos"}`);
@@ -1075,24 +1217,43 @@ async function drawRaffleWinnerSupabase(
   };
 }
 
-async function runDueRaffleDrawsSupabase() {
-  const supabase = getSupabaseAdminClient();
-  const now = new Date().toISOString();
-
-  const dueRaffles = await supabase
-    .from("app_raffles")
-    .select("id")
-    .eq("status", "published")
-    .is("drawn_at", null)
-    .lte("draw_at", now)
-    .returns<Array<{ id: string }>>();
-
-  if (dueRaffles.error) {
-    throw new Error(`Error verificando sorteos pendientes: ${dueRaffles.error.message}`);
+async function runDueRaffleDrawsSupabase(options?: { force?: boolean }) {
+  const nowMs = Date.now();
+  if (!options?.force && nowMs - lastDueDrawScanAt < DUE_DRAW_SCAN_INTERVAL_MS) {
+    return;
   }
 
-  for (const raffle of dueRaffles.data ?? []) {
-    await drawRaffleWinnerSupabase(raffle.id, { force: true });
+  if (dueDrawScanInFlight) {
+    await dueDrawScanInFlight;
+    return;
+  }
+
+  dueDrawScanInFlight = (async () => {
+    const supabase = getSupabaseAdminClient();
+    const nowIso = new Date().toISOString();
+
+    const dueRaffles = await supabase
+      .from("app_raffles")
+      .select("id")
+      .in("status", ["published", "closed"])
+      .is("drawn_at", null)
+      .lte("draw_at", nowIso)
+      .returns<Array<{ id: string }>>();
+
+    if (dueRaffles.error) {
+      throw new Error(`Error verificando sorteos pendientes: ${dueRaffles.error.message}`);
+    }
+
+    for (const raffle of dueRaffles.data ?? []) {
+      await drawRaffleWinnerSupabase(raffle.id, { force: true });
+    }
+  })();
+
+  try {
+    await dueDrawScanInFlight;
+    lastDueDrawScanAt = Date.now();
+  } finally {
+    dueDrawScanInFlight = null;
   }
 }
 
@@ -1284,8 +1445,8 @@ export async function createRaffleService(input: CreateRaffleInput) {
   const supabase = getSupabaseAdminClient();
   const verificationMode = input.verificationMode ?? "commit_reveal";
   const publicSeed = input.publicSeed ?? randomUUID().replace(/-/g, "").slice(0, 24);
-  const revealSecret = randomUUID().replace(/-/g, "").slice(0, 32);
-  const secretCommitHash = hashSha256(`${publicSeed}:${revealSecret}`);
+  const drawSecret = randomUUID().replace(/-/g, "");
+  const secretCommitHash = hashSha256(drawSecret);
   const sanitizedPaymentMethods = sanitizeRafflePaymentMethods(input.paymentMethods);
   const normalizedPaymentLinks = sanitizeRafflePaymentLinks(input.paymentLinks);
   const paymentLinks = sanitizeRafflePaymentLinks(input.paymentLinks);
@@ -1298,7 +1459,15 @@ export async function createRaffleService(input: CreateRaffleInput) {
   const howToJoinItems = sanitizeStringList(input.howToJoinItems);
   const drawPayloadJson: Record<string, unknown> =
     verificationMode === "commit_reveal"
-      ? { commit_hash: secretCommitHash, reveal_secret: revealSecret, prepared_at: now, public_seed: publicSeed }
+      ? {
+          verification_version: "sha256-modulo-v1",
+          verification_status: "prepared",
+          commit_hash: secretCommitHash,
+          draw_secret: drawSecret,
+          prepared_at: now,
+          public_seed: publicSeed,
+          algorithm: "sha256-modulo-v1"
+        }
       : {};
   if (typeof input.publicSubtitle === "string" && input.publicSubtitle.trim()) {
     drawPayloadJson.public_subtitle = input.publicSubtitle.trim();
@@ -1332,47 +1501,58 @@ export async function createRaffleService(input: CreateRaffleInput) {
     drawPayloadJson.payment_links_note = paymentLinksNote;
   }
 
-  const result = await supabase
-    .from("app_raffles")
-    .insert({
-      title: input.title,
-      description: input.description,
-      rules_text: input.rulesText ?? input.requirements,
-      image_url: input.imageUrl ?? null,
-      cta_label: input.publicCtaLabel ?? input.ctaLabel ?? null,
-      cta_href: input.ctaHref ?? null,
-      is_free: input.isFree,
-      entry_fee: input.isFree ? 0 : input.entryFee,
-      payment_instructions: input.isFree ? "No requiere pago." : input.paymentInstructions,
-      requirements: input.requirements,
-      prize: input.prize,
-      start_date: input.startDate,
-      end_date: input.endDate,
-      draw_at: drawAt.toISOString(),
-      number_pool_size: input.numberPoolSize,
-      status: input.status,
-      seo_title: input.seoTitle ?? null,
-      seo_description: input.seoDescription ?? null,
-      seo_og_image: input.seoOgImage ?? null,
-      public_participants_enabled: input.publicParticipantsEnabled ?? false,
-      public_participants_mode: input.publicParticipantsMode ?? "masked",
-      public_numbers_visibility: input.publicNumbersVisibility ?? true,
-      public_number_grid_mode: input.publicNumberGridMode ?? "full",
-      public_winner_name: input.publicWinnerName ?? false,
-      verification_mode: verificationMode,
-      public_seed: verificationMode === "commit_reveal" ? publicSeed : null,
-      secret_commit_hash: verificationMode === "commit_reveal" ? secretCommitHash : null,
-      draw_algorithm: "sha256-modulo-v1",
-      draw_payload_json: drawPayloadJson,
-      referral_enabled: input.referralEnabled ?? true,
-      viral_counter_enabled: input.viralCounterEnabled ?? true,
-      urgency_message: input.urgencyMessage ?? null,
-      public_activity_enabled: input.publicActivityEnabled ?? true,
-      live_draw_enabled: input.liveDrawEnabled ?? true,
-      updated_at: now
-    })
-    .select("*")
-    .single<AppRaffleRow>();
+  const insertPayload: Record<string, unknown> = {
+    title: input.title,
+    description: input.description,
+    rules_text: input.rulesText ?? input.requirements,
+    image_url: input.imageUrl ?? null,
+    cta_label: input.publicCtaLabel ?? input.ctaLabel ?? null,
+    cta_href: input.ctaHref ?? null,
+    is_free: input.isFree,
+    entry_fee: input.isFree ? 0 : input.entryFee,
+    payment_instructions: input.isFree ? "No requiere pago." : input.paymentInstructions,
+    requirements: input.requirements,
+    prize: input.prize,
+    start_date: input.startDate,
+    end_date: input.endDate,
+    draw_at: drawAt.toISOString(),
+    number_pool_size: input.numberPoolSize,
+    status: input.status,
+    seo_title: input.seoTitle ?? null,
+    seo_description: input.seoDescription ?? null,
+    seo_og_image: input.seoOgImage ?? null,
+    public_participants_enabled: input.publicParticipantsEnabled ?? false,
+    public_participants_mode: input.publicParticipantsMode ?? "masked",
+    public_numbers_visibility: input.publicNumbersVisibility ?? true,
+    public_number_grid_mode: input.publicNumberGridMode ?? "full",
+    public_winner_name: input.publicWinnerName ?? false,
+    verification_mode: verificationMode,
+    public_seed: verificationMode === "commit_reveal" ? publicSeed : null,
+    secret_commit_hash: verificationMode === "commit_reveal" ? secretCommitHash : null,
+    draw_algorithm: "sha256-modulo-v1",
+    draw_payload_json: drawPayloadJson,
+    verification_version: "sha256-modulo-v1",
+    verification_status: verificationMode === "commit_reveal" ? "prepared" : "legacy",
+    draw_secret: verificationMode === "commit_reveal" ? drawSecret : null,
+    is_legacy: verificationMode !== "commit_reveal",
+    referral_enabled: input.referralEnabled ?? true,
+    viral_counter_enabled: input.viralCounterEnabled ?? true,
+    urgency_message: input.urgencyMessage ?? null,
+    public_activity_enabled: input.publicActivityEnabled ?? true,
+    live_draw_enabled: input.liveDrawEnabled ?? true,
+    updated_at: now
+  };
+
+  let result = await supabase.from("app_raffles").insert(insertPayload).select("*").single<AppRaffleRow>();
+
+  if (result.error && (result.error.code === "42703" || /column .* does not exist/i.test(result.error.message))) {
+    delete insertPayload.verification_version;
+    delete insertPayload.verification_status;
+    delete insertPayload.draw_secret;
+    delete insertPayload.is_legacy;
+
+    result = await supabase.from("app_raffles").insert(insertPayload).select("*").single<AppRaffleRow>();
+  }
 
   if (result.error || !result.data) {
     throw new Error(`No se pudo crear el sorteo: ${result.error?.message ?? "sin datos"}`);
@@ -2355,22 +2535,62 @@ export async function getRaffleVerificationPayloadService(raffleId: string): Pro
 
   const payload = (raffle.drawPayloadJson ?? {}) as Record<string, unknown>;
 
+  const revealAllowed = Boolean(raffle.drawnAt);
+  const drawSecretFromPayload = typeof payload.draw_secret === "string"
+    ? payload.draw_secret
+    : typeof payload.reveal_secret === "string"
+      ? payload.reveal_secret
+      : undefined;
+
   const normalized: RaffleVerificationPayload = {
     raffleId: raffle.id,
+    verificationVersion:
+      (typeof payload.verification_version === "string" ? payload.verification_version : raffle.verificationVersion) ??
+      "sha256-modulo-v1",
     algorithm: (payload.algorithm as RaffleDrawAlgorithm) ?? raffle.drawAlgorithm ?? "sha256-modulo-v1",
     verificationMode: (payload.verification_mode as RaffleVerificationMode) ?? raffle.verificationMode ?? "commit_reveal",
+    verificationStatus:
+      (typeof payload.verification_status === "string" ? payload.verification_status : raffle.verificationStatus) ??
+      (raffle.drawnAt ? "drawn" : "pending"),
     drawAt: raffle.drawAt,
     drawnAt: raffle.drawnAt,
+    salesClosedAt:
+      (typeof payload.sales_closed_at === "string" ? payload.sales_closed_at : raffle.salesClosedAt) ??
+      undefined,
+    winnerPublishedAt:
+      (typeof payload.winner_published_at === "string" ? payload.winner_published_at : raffle.winnerPublishedAt) ??
+      undefined,
     publicSeed: (payload.public_seed as string) ?? raffle.publicSeed,
     commitHash: (payload.commit_hash as string) ?? raffle.secretCommitHash,
-    revealSecret: typeof payload.reveal_secret === "string" ? payload.reveal_secret : undefined,
+    revealSecret: revealAllowed ? (raffle.drawSecret ?? drawSecretFromPayload) : undefined,
     eligibleNumbers: Array.isArray(payload.eligible_numbers)
       ? payload.eligible_numbers.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item > 0)
       : [],
+    totalTickets:
+      typeof payload.total_tickets === "number"
+        ? payload.total_tickets
+        : typeof raffle.totalTickets === "number"
+          ? raffle.totalTickets
+          : undefined,
     hashInput: typeof payload.hash_input === "string" ? payload.hash_input : undefined,
-    drawHash: typeof payload.draw_hash === "string" ? payload.draw_hash : undefined,
+    drawHash:
+      typeof payload.draw_hash === "string"
+        ? payload.draw_hash
+        : typeof raffle.drawHash === "string"
+          ? raffle.drawHash
+          : undefined,
+    winningIndex:
+      typeof payload.winner_index === "number"
+        ? payload.winner_index
+        : typeof raffle.winningIndex === "number"
+          ? raffle.winningIndex
+          : undefined,
     winnerNumber: typeof payload.winner_number === "number" ? payload.winner_number : raffle.winnerNumber,
-    winnerEntryId: typeof payload.winner_entry_id === "string" ? payload.winner_entry_id : raffle.winnerEntryId
+    winnerEntryId: typeof payload.winner_entry_id === "string" ? payload.winner_entry_id : raffle.winnerEntryId,
+    isLegacy:
+      typeof payload.is_legacy === "boolean"
+        ? payload.is_legacy
+        : Boolean(raffle.isLegacy || raffle.verificationMode === "none")
   };
 
   return normalized;
@@ -2442,7 +2662,223 @@ export async function drawRaffleWinnerService(raffleId: string, actorId?: string
   return drawRaffleWinnerSupabase(raffleId, { force: true, actorId });
 }
 
-export async function verifyRaffleDrawService(raffleId: string) {
+export async function prepareVerifiedRaffleService(raffleId: string, actorId?: string) {
+  ensureConfigured();
+
+  const supabase = getSupabaseAdminClient();
+  const raffle = await getRaffleRowOrThrow(raffleId);
+  const payload = asRecord(raffle.draw_payload_json);
+  const verificationMode = raffle.verification_mode ?? "commit_reveal";
+
+  if (verificationMode !== "commit_reveal") {
+    return mapRaffle(raffle);
+  }
+
+  const drawSecret = (raffle.draw_secret ?? asNonEmptyString(payload.draw_secret)) || randomUUID().replace(/-/g, "");
+  const commitHash = hashSha256(drawSecret);
+  const publicSeed = (raffle.public_seed ?? asNonEmptyString(payload.public_seed)) || randomUUID().replace(/-/g, "").slice(0, 24);
+  const nextPayload: Record<string, unknown> = {
+    ...payload,
+    verification_version: "sha256-modulo-v1",
+    verification_status: "prepared",
+    verification_mode: "commit_reveal",
+    algorithm: "sha256-modulo-v1",
+    draw_secret: drawSecret,
+    commit_hash: commitHash,
+    public_seed: publicSeed,
+    prepared_at: new Date().toISOString()
+  };
+
+  const updatePayload: Record<string, unknown> = {
+    draw_secret: drawSecret,
+    secret_commit_hash: commitHash,
+    public_seed: publicSeed,
+    verification_version: "sha256-modulo-v1",
+    verification_status: "prepared",
+    is_legacy: false,
+    draw_payload_json: nextPayload,
+    updated_at: new Date().toISOString()
+  };
+
+  let updated = await supabase
+    .from("app_raffles")
+    .update(updatePayload)
+    .eq("id", raffleId)
+    .select("*")
+    .single<AppRaffleRow>();
+
+  if (updated.error && (updated.error.code === "42703" || /column .* does not exist/i.test(updated.error.message))) {
+    delete updatePayload.draw_secret;
+    delete updatePayload.verification_version;
+    delete updatePayload.verification_status;
+    delete updatePayload.is_legacy;
+    updated = await supabase
+      .from("app_raffles")
+      .update(updatePayload)
+      .eq("id", raffleId)
+      .select("*")
+      .single<AppRaffleRow>();
+  }
+
+  if (updated.error || !updated.data) {
+    throw new Error(`No se pudo preparar la verificación del sorteo: ${updated.error?.message ?? "sin datos"}`);
+  }
+
+  await logRaffleAdminAction({
+    raffleId,
+    actorId,
+    action: "commit_generated",
+    entityType: "raffle",
+    entityId: raffleId,
+    metadata: { commitHash, algorithm: "sha256-modulo-v1" }
+  });
+
+  return mapRaffle(updated.data);
+}
+
+export async function closeRaffleSalesService(raffleId: string, actorId?: string) {
+  ensureConfigured();
+
+  const supabase = getSupabaseAdminClient();
+  const raffle = await getRaffleRowOrThrow(raffleId);
+  const payload = asRecord(raffle.draw_payload_json);
+  const closedAt = new Date().toISOString();
+  const nextPayload: Record<string, unknown> = {
+    ...payload,
+    sales_closed_at: closedAt,
+    verification_status: "sales_closed"
+  };
+
+  const updatePayload: Record<string, unknown> = {
+    status: "closed",
+    sales_closed_at: closedAt,
+    verification_status: "sales_closed",
+    draw_payload_json: nextPayload,
+    updated_at: closedAt
+  };
+
+  let updated = await supabase
+    .from("app_raffles")
+    .update(updatePayload)
+    .eq("id", raffleId)
+    .is("drawn_at", null)
+    .select("*")
+    .single<AppRaffleRow>();
+
+  if (updated.error && (updated.error.code === "42703" || /column .* does not exist/i.test(updated.error.message))) {
+    delete updatePayload.sales_closed_at;
+    delete updatePayload.verification_status;
+    updated = await supabase
+      .from("app_raffles")
+      .update(updatePayload)
+      .eq("id", raffleId)
+      .is("drawn_at", null)
+      .select("*")
+      .single<AppRaffleRow>();
+  }
+
+  if (updated.error || !updated.data) {
+    throw new Error(`No se pudo cerrar venta de boletos: ${updated.error?.message ?? "sin datos"}`);
+  }
+
+  await logRaffleAdminAction({
+    raffleId,
+    actorId,
+    action: "sales_closed",
+    entityType: "raffle",
+    entityId: raffleId,
+    metadata: { closedAt }
+  });
+
+  return mapRaffle(updated.data);
+}
+
+export async function publishRaffleWinnerService(raffleId: string, actorId?: string) {
+  ensureConfigured();
+
+  const supabase = getSupabaseAdminClient();
+  const raffle = await getRaffleRowOrThrow(raffleId);
+  if (!raffle.drawn_at) {
+    throw new Error("No puedes publicar ganador antes de ejecutar el sorteo");
+  }
+
+  const payload = asRecord(raffle.draw_payload_json);
+  const publishedAt = new Date().toISOString();
+  const nextPayload: Record<string, unknown> = {
+    ...payload,
+    winner_published_at: publishedAt,
+    verification_status: "winner_published"
+  };
+  const updatePayload: Record<string, unknown> = {
+    winner_published_at: publishedAt,
+    verification_status: "winner_published",
+    draw_payload_json: nextPayload,
+    updated_at: publishedAt
+  };
+
+  let updated = await supabase
+    .from("app_raffles")
+    .update(updatePayload)
+    .eq("id", raffleId)
+    .select("*")
+    .single<AppRaffleRow>();
+
+  if (updated.error && (updated.error.code === "42703" || /column .* does not exist/i.test(updated.error.message))) {
+    delete updatePayload.winner_published_at;
+    delete updatePayload.verification_status;
+    updated = await supabase
+      .from("app_raffles")
+      .update(updatePayload)
+      .eq("id", raffleId)
+      .select("*")
+      .single<AppRaffleRow>();
+  }
+
+  if (updated.error || !updated.data) {
+    throw new Error(`No se pudo publicar ganador: ${updated.error?.message ?? "sin datos"}`);
+  }
+
+  await logRaffleAdminAction({
+    raffleId,
+    actorId,
+    action: "winner_published",
+    entityType: "raffle",
+    entityId: raffleId,
+    metadata: { winnerNumber: updated.data.winner_number, publishedAt }
+  });
+
+  return mapRaffle(updated.data);
+}
+
+export async function exportRaffleCertificateService(raffleId: string) {
+  ensureConfigured();
+
+  const raffle = await getRaffleByIdService(raffleId);
+  if (!raffle) {
+    throw new Error("Sorteo no encontrado");
+  }
+  const verification = await verifyRaffleDrawService(raffleId);
+  const participants = await listPublicRaffleParticipantsService(raffleId);
+  const winnerName = raffle.winnerNumber
+    ? participants.find((participant) => participant.chosenNumber === raffle.winnerNumber)?.displayName ?? null
+    : null;
+
+  return {
+    generatedAt: new Date().toISOString(),
+    raffle: {
+      id: raffle.id,
+      title: raffle.title,
+      status: raffle.status,
+      drawAt: raffle.drawAt,
+      drawnAt: raffle.drawnAt ?? null,
+      winnerNumber: raffle.winnerNumber ?? null,
+      winnerDisplayName: winnerName
+    },
+    verification
+  };
+}
+
+export async function verifyRaffleDrawService(raffleId: string): Promise<RaffleVerificationResult> {
   ensureConfigured();
 
   const payload = await getRaffleVerificationPayloadService(raffleId);
@@ -2450,33 +2886,118 @@ export async function verifyRaffleDrawService(raffleId: string) {
     throw new Error("Sorteo no encontrado");
   }
 
-  if (payload.verificationMode !== "commit_reveal") {
-    return { verified: false, reason: "verification_mode_disabled", payload };
+  if (payload.isLegacy || payload.verificationMode !== "commit_reveal") {
+    return {
+      verified: false,
+      reason: "legacy",
+      status: "legacy",
+      checks: {
+        commit: false,
+        drawHash: false,
+        winner: false,
+        payloadComplete: false
+      },
+      payload
+    };
   }
 
-  if (!payload.publicSeed || !payload.revealSecret || !payload.commitHash || !payload.hashInput || !payload.drawHash) {
-    return { verified: false, reason: "missing_payload", payload };
+  if (!payload.drawnAt) {
+    return {
+      verified: false,
+      reason: "draw_pending",
+      status: "pending",
+      checks: {
+        commit: Boolean(payload.commitHash),
+        drawHash: false,
+        winner: false,
+        payloadComplete: false
+      },
+      payload
+    };
   }
 
-  const recomputedCommit = hashSha256(`${payload.publicSeed}:${payload.revealSecret}`);
-  const recomputedHash = hashSha256(payload.hashInput);
+  const resolvedTotalTickets =
+    typeof payload.totalTickets === "number" ? payload.totalTickets : payload.eligibleNumbers.length;
+
+  if (resolvedTotalTickets === 0) {
+    return {
+      verified: true,
+      reason: "no_eligible_tickets",
+      status: "verified",
+      checks: {
+        commit: Boolean(payload.commitHash),
+        drawHash: true,
+        winner: true,
+        payloadComplete: true
+      },
+      payload: {
+        ...payload,
+        totalTickets: 0
+      }
+    };
+  }
+
+  const payloadComplete = Boolean(
+    payload.revealSecret &&
+    payload.commitHash &&
+    payload.drawHash &&
+    payload.salesClosedAt &&
+      typeof resolvedTotalTickets === "number" &&
+      typeof payload.winnerNumber === "number"
+  );
+
+  if (!payloadComplete) {
+    return {
+      verified: false,
+      reason: "missing_payload",
+      status: "failed",
+      checks: {
+        commit: false,
+        drawHash: false,
+        winner: false,
+        payloadComplete: false
+      },
+      payload
+    };
+  }
+
+  const recomputedCommit = hashSha256(payload.revealSecret!);
+  const expectedHashInput = buildDrawHashInput({
+    drawSecret: payload.revealSecret!,
+    raffleId: payload.raffleId,
+    closeTimestamp: payload.salesClosedAt!,
+    totalTickets: resolvedTotalTickets
+  });
+  const recomputedDrawHash = hashSha256(expectedHashInput);
+  const recomputedWinningIndex = winnerIndexFromHash(recomputedDrawHash, resolvedTotalTickets);
+  const recomputedWinnerNumber =
+    recomputedWinningIndex !== null ? payload.eligibleNumbers[recomputedWinningIndex] ?? undefined : undefined;
 
   const commitOk = recomputedCommit === payload.commitHash;
-  const hashOk = recomputedHash === payload.drawHash;
-
-  let winnerOk = true;
-  if (payload.eligibleNumbers.length > 0 && typeof payload.winnerNumber === "number") {
-    const winnerIndex = Number(BigInt(`0x${payload.drawHash.slice(0, 15)}`) % BigInt(payload.eligibleNumbers.length));
-    winnerOk = payload.eligibleNumbers[winnerIndex] === payload.winnerNumber;
-  }
+  const drawHashOk = recomputedDrawHash === payload.drawHash;
+  const winnerOk =
+    typeof payload.winnerNumber === "number" &&
+    typeof recomputedWinnerNumber === "number" &&
+    payload.winnerNumber === recomputedWinnerNumber;
 
   return {
-    verified: commitOk && hashOk && winnerOk,
+    verified: commitOk && drawHashOk && winnerOk,
+    reason: commitOk && drawHashOk && winnerOk ? undefined : "integrity_mismatch",
+    status: commitOk && drawHashOk && winnerOk ? "verified" : "failed",
     checks: {
       commit: commitOk,
-      hash: hashOk,
-      winner: winnerOk
+      drawHash: drawHashOk,
+      winner: winnerOk,
+      payloadComplete: true
     },
-    payload
+    computed: {
+      drawHash: recomputedDrawHash,
+      winningIndex: recomputedWinningIndex ?? undefined,
+      winnerNumber: recomputedWinnerNumber
+    },
+    payload: {
+      ...payload,
+      hashInput: expectedHashInput
+    }
   };
 }

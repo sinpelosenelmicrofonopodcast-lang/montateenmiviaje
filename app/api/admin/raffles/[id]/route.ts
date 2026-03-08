@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { deleteRaffleService, updateRaffleService, updateRaffleStatusService } from "@/lib/raffles-service";
 
 const paymentLinkSchema = z.object({
@@ -75,6 +76,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  await requireAdminServerAccess();
   try {
     const { id } = await params;
     const payload = schema.parse(await request.json());
@@ -100,6 +102,7 @@ export async function DELETE(
   _: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  await requireAdminServerAccess();
   try {
     const { id } = await params;
     const result = await deleteRaffleService(id);

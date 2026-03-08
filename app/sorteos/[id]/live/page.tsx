@@ -29,13 +29,14 @@ export default async function SorteoLivePage({ params }: SorteoLivePageProps) {
     notFound();
   }
 
-  const allNumbers = await listRaffleNumbersService(id, { limit: raffle.numberPoolSize });
+  const soldOrWinnerNumbers = await listRaffleNumbersService(id, {
+    statuses: ["sold", "winner"],
+    limit: raffle.numberPoolSize
+  });
   const eligibleNumbers = (
     verification?.eligibleNumbers && verification.eligibleNumbers.length > 0
       ? verification.eligibleNumbers
-      : allNumbers
-          .filter((item) => item.status === "sold" || item.status === "winner")
-          .map((item) => item.numberValue)
+      : soldOrWinnerNumbers.map((item) => item.numberValue)
   )
     .filter((value, index, array) => array.indexOf(value) === index)
     .sort((a, b) => a - b);

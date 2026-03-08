@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { drawRaffleWinnerService, verifyRaffleDrawService } from "@/lib/raffles-service";
 
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAdminServerAccess();
   try {
     const { id } = await params;
-    const result = await drawRaffleWinnerService(id);
+    const result = await drawRaffleWinnerService(id, auth.user?.id);
     const verification = await verifyRaffleDrawService(id);
 
     return NextResponse.json({

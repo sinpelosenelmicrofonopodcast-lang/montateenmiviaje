@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CopyValueButton } from "@/components/custom/copy-value-button";
+import { RaffleVerificationPanel } from "@/components/custom/raffle-verification-panel";
 import { RaffleCountdown } from "@/components/custom/raffle-countdown";
 import { RaffleEntryForm } from "@/components/custom/raffle-entry-form";
 import { RaffleNumberGrid } from "@/components/custom/raffle-number-grid";
@@ -18,8 +18,9 @@ import {
   getRafflePublicSummaryService,
   getRaffleVerificationPayloadService,
   listAvailableRaffleNumbersService,
+  listPublicRaffleParticipantsService,
   listRaffleNumbersService,
-  listPublicRaffleParticipantsService
+  verifyRaffleDrawService
 } from "@/lib/raffles-service";
 import { normalizeWhatsAppLink } from "@/lib/social-links";
 import styles from "./raffle-page.module.css";
@@ -57,12 +58,16 @@ export default async function SorteoDetailPage({ params }: SorteoDetailPageProps
     notFound();
   }
 
-  const [summary, participants, verification, availableNumbers, allNumbers] = await Promise.all([
+  const [summary, participants, verification, verificationResult, availableNumbers, soldOrWinnerNumbers] = await Promise.all([
     getRafflePublicSummaryService(id),
     listPublicRaffleParticipantsService(id),
     getRaffleVerificationPayloadService(id),
+    verifyRaffleDrawService(id),
     listAvailableRaffleNumbersService(id),
-    listRaffleNumbersService(id, { limit: raffle.numberPoolSize })
+    listRaffleNumbersService(id, {
+      statuses: ["sold", "winner"],
+      limit: raffle.numberPoolSize
+    })
   ]);
 
   const confirmedCount = summary.metrics.confirmedEntries;
@@ -140,9 +145,7 @@ export default async function SorteoDetailPage({ params }: SorteoDetailPageProps
   const eligibleNumbers = (
     verification?.eligibleNumbers && verification.eligibleNumbers.length > 0
       ? verification.eligibleNumbers
-      : allNumbers
-          .filter((item) => item.status === "sold" || item.status === "winner")
-          .map((item) => item.numberValue)
+      : soldOrWinnerNumbers.map((item) => item.numberValue)
   )
     .filter((value, index, array) => array.indexOf(value) === index)
     .sort((a, b) => a - b);
@@ -358,45 +361,7 @@ export default async function SorteoDetailPage({ params }: SorteoDetailPageProps
           </section>
         ) : null}
 
-        <section id="verificacion" className={`card ${styles.verificationCard}`}>
-          <div className={styles.sectionHead}>
-            <h3>Verificación segura del sorteo</h3>
-            <p className="muted">Sistema transparente basado en commit-reveal y hash verificable.</p>
-          </div>
-          {verification ? (
-            <div className={styles.verificationGrid}>
-              <div className={styles.verificationRow}>
-                <div>
-                  <p className="muted">Algoritmo</p>
-                  <p>{verification.algorithm}</p>
-                </div>
-              </div>
-              <div className={styles.verificationRow}>
-                <div>
-                  <p className="muted">Seed pública</p>
-                  <p className={styles.verificationValue}>{verification.publicSeed ?? "Pendiente"}</p>
-                </div>
-                {verification.publicSeed ? <CopyValueButton value={verification.publicSeed} /> : null}
-              </div>
-              <div className={styles.verificationRow}>
-                <div>
-                  <p className="muted">Commit hash</p>
-                  <p className={styles.verificationValue}>{verification.commitHash ?? "Pendiente"}</p>
-                </div>
-                {verification.commitHash ? <CopyValueButton value={verification.commitHash} /> : null}
-              </div>
-              <div className={styles.verificationRow}>
-                <div>
-                  <p className="muted">Draw hash</p>
-                  <p className={styles.verificationValue}>{verification.drawHash ?? "Pendiente"}</p>
-                </div>
-                {verification.drawHash ? <CopyValueButton value={verification.drawHash} /> : null}
-              </div>
-            </div>
-          ) : (
-            <p className="muted">Pendiente de publicación de datos verificables.</p>
-          )}
-        </section>
+        <RaffleVerificationPanel raffleId={raffle.id} initialVerification={verificationResult} />
 
         <section className="card">
           <h3>Preguntas frecuentes</h3>

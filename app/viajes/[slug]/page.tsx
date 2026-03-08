@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTripBySlugService } from "@/lib/catalog-service";
@@ -27,12 +28,16 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
     <main className="container section">
       <div className="trip-detail-shell">
         <section>
-          <img
+          <Image
             className="trip-detail-image"
             src={safeImageSrc}
             alt={trip.title}
+            width={1800}
+            height={1200}
+            sizes="(max-width: 1024px) 100vw, 66vw"
             loading="eager"
             decoding="async"
+            unoptimized
           />
           <h1>{trip.title}</h1>
           <p className="chip">{trip.category}</p>

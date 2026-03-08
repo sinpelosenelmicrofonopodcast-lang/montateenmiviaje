@@ -1,4 +1,5 @@
 import { getSiteSettingService } from "@/lib/cms-service";
+import Image from "next/image";
 import Link from "next/link";
 import { toPublicImageSrc } from "@/lib/image-url";
 import { TravelIcon } from "@/components/ui/travel-icons";
@@ -45,7 +46,7 @@ export async function SiteFooter() {
         <div className="footer-top">
           <div>
             <div className="footer-brand-row">
-              <img src={logoUrl} alt={siteName} width={68} height={68} className="footer-brand-logo" />
+              <Image src={logoUrl} alt={siteName} width={68} height={68} className="footer-brand-logo" unoptimized />
               <div>
                 <p className="footer-brand">{siteName}</p>
                 <p className="footer-tagline">{tagline}</p>

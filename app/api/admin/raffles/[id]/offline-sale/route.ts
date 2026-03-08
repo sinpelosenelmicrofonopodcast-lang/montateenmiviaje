@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { registerOfflineRaffleSaleService } from "@/lib/raffles-service";
 
 const schema = z.object({
@@ -20,6 +21,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  await requireAdminServerAccess();
   try {
     const { id } = await params;
     const payload = schema.parse(await request.json());

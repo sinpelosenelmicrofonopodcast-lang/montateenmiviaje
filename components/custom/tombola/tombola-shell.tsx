@@ -51,7 +51,8 @@ export function TombolaShell({
   variant = "embedded"
 }: TombolaShellProps) {
   const initialWinner = typeof winnerNumber === "number" ? winnerNumber : verification?.winnerNumber;
-  const hasStoredWinner = typeof initialWinner === "number";
+  const hasInitialDrawResult = Boolean(drawnAt || verification?.drawnAt);
+  const hasStoredWinner = hasInitialDrawResult && typeof initialWinner === "number";
   const [phase, setPhase] = useState<DrawPhase>(() => getInitialPhase(drawnAt, drawAt, eligibleNumbers.length));
   const [ticker, setTicker] = useState<number[]>(() => buildTicker(eligibleNumbers));
   const [isRunning, setIsRunning] = useState(false);
@@ -65,7 +66,7 @@ export function TombolaShell({
 
   const shouldShowRunButton =
     canRunDraw && !localDrawnAt && eligibleNumbers.length > 0 && Date.now() >= new Date(drawAt).getTime();
-  const hasWinner = typeof localWinner === "number";
+  const hasWinner = Boolean(localDrawnAt) && typeof localWinner === "number";
   const revealLabel =
     phase === "drawing"
       ? "Mezclando números elegibles..."
@@ -227,7 +228,7 @@ export function TombolaShell({
           <div className={styles.reveal}>
             <p className={styles.revealLabel}>{revealLabel}</p>
             <p className={styles.revealNumber}>{revealValue}</p>
-            {winnerDisplayName ? <p className={styles.winnerName}>{winnerDisplayName}</p> : null}
+            {winnerDisplayName && hasWinner ? <p className={styles.winnerName}>{winnerDisplayName}</p> : null}
           </div>
         </div>
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import {
   createRaffleService,
   getRaffleAdminSnapshotService,
@@ -77,6 +78,7 @@ const createSchema = z.object({
 });
 
 export async function GET(request: Request) {
+  await requireAdminServerAccess();
   try {
     const { searchParams } = new URL(request.url);
     const raffleId = searchParams.get("raffleId");
@@ -102,6 +104,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  await requireAdminServerAccess();
   try {
     const payload = createSchema.parse(await request.json());
     const raffle = await createRaffleService(payload);

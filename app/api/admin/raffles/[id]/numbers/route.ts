@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { listRaffleNumbersService, updateRaffleNumbersService } from "@/lib/raffles-service";
 
 const bulkSchema = z.object({
@@ -16,6 +17,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  await requireAdminServerAccess();
   try {
     const { id } = await params;
     const { searchParams } = new URL(request.url);
@@ -48,6 +50,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  await requireAdminServerAccess();
   try {
     const { id } = await params;
     const payload = bulkSchema.parse(await request.json());
