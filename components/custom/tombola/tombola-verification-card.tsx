@@ -13,7 +13,7 @@ export function TombolaVerificationCard({ verification }: TombolaVerificationCar
     return (
       <section className={`${styles.panel} ${styles.verification}`}>
         <h4>Transparencia verificable</h4>
-        <p className="muted">Aún no hay payload de verificación publicado.</p>
+        <p className="muted">Los datos de verificación se publicarán cuando finalice el sorteo.</p>
       </section>
     );
   }

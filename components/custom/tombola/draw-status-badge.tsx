@@ -7,7 +7,7 @@ interface DrawStatusBadgeProps {
 }
 
 const statusLabels: Record<DrawPhase, string> = {
-  pending: "Pendiente",
+  pending: "Pendiente de anuncio",
   ready: "Listo para sortear",
   drawing: "Mezclando números",
   reveal: "Resultado verificado",

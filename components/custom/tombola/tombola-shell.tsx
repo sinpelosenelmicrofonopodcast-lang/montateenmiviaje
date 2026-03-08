@@ -51,11 +51,12 @@ export function TombolaShell({
   variant = "embedded"
 }: TombolaShellProps) {
   const initialWinner = typeof winnerNumber === "number" ? winnerNumber : verification?.winnerNumber;
+  const hasStoredWinner = typeof initialWinner === "number";
   const [phase, setPhase] = useState<DrawPhase>(() => getInitialPhase(drawnAt, drawAt, eligibleNumbers.length));
   const [ticker, setTicker] = useState<number[]>(() => buildTicker(eligibleNumbers));
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [localWinner, setLocalWinner] = useState<number | null>(typeof initialWinner === "number" ? initialWinner : null);
+  const [localWinner, setLocalWinner] = useState<number | null>(hasStoredWinner ? initialWinner : null);
   const [localDrawnAt, setLocalDrawnAt] = useState<string | undefined>(drawnAt ?? verification?.drawnAt);
   const [localVerification, setLocalVerification] = useState<RaffleVerificationPayload | null>(verification);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -64,6 +65,16 @@ export function TombolaShell({
 
   const shouldShowRunButton =
     canRunDraw && !localDrawnAt && eligibleNumbers.length > 0 && Date.now() >= new Date(drawAt).getTime();
+  const hasWinner = typeof localWinner === "number";
+  const revealLabel =
+    phase === "drawing"
+      ? "Mezclando números elegibles..."
+      : hasWinner
+        ? "Número ganador"
+        : localDrawnAt
+          ? "Resultado publicado"
+          : "Ganador por anunciar";
+  const revealValue = hasWinner ? `#${localWinner}` : phase === "drawing" ? "..." : "Pendiente";
 
   const summary = useMemo(
     () => ({
@@ -180,7 +191,7 @@ export function TombolaShell({
             <p className={styles.eyebrow}>Sorteo en vivo</p>
             <h3 className={styles.title}>Tómbola virtual premium</h3>
             <p className={styles.subtitle}>
-              {title}. Capa visual del resultado verificable real; la selección final siempre proviene del backend.
+              {title}. Sigue la tómbola en tiempo real y consulta el resultado oficial del sorteo.
             </p>
           </div>
           <DrawStatusBadge phase={phase} />
@@ -214,12 +225,8 @@ export function TombolaShell({
             )}
           </div>
           <div className={styles.reveal}>
-            <p className={styles.revealLabel}>
-              {phase === "drawing" ? "Mezclando números elegibles..." : "Ganador confirmado"}
-            </p>
-            <p className={styles.revealNumber}>
-              {typeof localWinner === "number" ? `#${localWinner}` : phase === "drawing" ? "..." : "Sin ganador"}
-            </p>
+            <p className={styles.revealLabel}>{revealLabel}</p>
+            <p className={styles.revealNumber}>{revealValue}</p>
             {winnerDisplayName ? <p className={styles.winnerName}>{winnerDisplayName}</p> : null}
           </div>
         </div>
@@ -237,7 +244,7 @@ export function TombolaShell({
           ) : null}
           {variant !== "fullscreen" && liveHref ? (
             <a className="button-outline" href={liveHref} target="_blank" rel="noreferrer">
-              Abrir modo live fullscreen
+              Ver modo en vivo
             </a>
           ) : null}
           {variant === "fullscreen" ? (
@@ -252,7 +259,7 @@ export function TombolaShell({
 
       <TombolaVerificationCard verification={localVerification} />
       <p className={styles.disclaimer}>
-        Transparencia verificable: la animación no escoge ganador. El ganador real sale del algoritmo y hash guardado.
+        Resultado transparente y verificable con publicación oficial al cierre del sorteo.
       </p>
     </section>
   );
