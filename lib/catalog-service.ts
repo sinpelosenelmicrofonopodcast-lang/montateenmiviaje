@@ -8,6 +8,7 @@ import {
   Trip,
   TripCategory
 } from "@/lib/types";
+import { dispatchNotificationEventSafe } from "@/lib/notifications/orchestrator";
 import { getSupabaseAdminClient, hasSupabaseConfig } from "@/lib/supabase-admin";
 
 interface AppTripRow {
@@ -38,6 +39,7 @@ interface AppTripRow {
   seo_description: string | null;
   seo_og_image: string | null;
   created_at: string;
+  updated_at?: string | null;
 }
 
 interface AppTripDayRow {
@@ -265,6 +267,37 @@ function isMissingPriceFromColumn(message: string) {
   return message.includes("price_from") && message.toLowerCase().includes("column");
 }
 
+function getMeaningfulTripPublicChanges(previous: AppTripRow, next: AppTripRow) {
+  const changed: string[] = [];
+
+  if (previous.start_date !== next.start_date || previous.end_date !== next.end_date) {
+    changed.push("fechas");
+  }
+  if (previous.destination !== next.destination) {
+    changed.push("destino");
+  }
+  if (previous.available_spots !== next.available_spots) {
+    changed.push("cupos");
+  }
+  if (previous.summary !== next.summary) {
+    changed.push("resumen");
+  }
+  if (previous.hero_image !== next.hero_image) {
+    changed.push("portada");
+  }
+
+  const hasMeaningfulChanges = changed.length > 0;
+  const summary = hasMeaningfulChanges
+    ? `Actualizamos ${changed.join(", ")} de ${next.title}. Revisa los cambios.`
+    : "";
+
+  return {
+    hasMeaningfulChanges,
+    changedFields: changed,
+    summary
+  };
+}
+
 function toOptionalNumber(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -449,7 +482,7 @@ export async function getTripBySlugService(slug: string, options?: { includeUnpu
   return hydrated[0] ?? null;
 }
 
-export async function createTripService(input: CreateTripInput) {
+export async function createTripService(input: CreateTripInput, actorUserId?: string) {
   ensureConfigured();
   const supabase = getSupabaseAdminClient();
 
@@ -501,12 +534,41 @@ export async function createTripService(input: CreateTripInput) {
     throw new Error(`No se pudo crear viaje: ${error?.message ?? "sin datos"}`);
   }
 
+  if (data.publish_status === "published") {
+    await dispatchNotificationEventSafe({
+      eventType: "TRIP_PUBLISHED",
+      entityType: "trip",
+      entityId: data.id,
+      actorUserId,
+      recipients: { scope: "broadcast", audience: "users" },
+      channels: ["push", "email", "inbox"],
+      variables: {
+        tripTitle: data.title,
+        link: `/viajes/${data.slug}`
+      },
+      link: `/viajes/${data.slug}`,
+      metadata: {
+        source: "trip_create"
+      },
+      dedupeKey: `trip-published:${data.id}:${data.updated_at ?? data.created_at}`
+    });
+  }
+
   return mapTrip(data, [], [], []);
 }
 
-export async function updateTripService(tripId: string, input: CreateTripInput) {
+export async function updateTripService(tripId: string, input: CreateTripInput, actorUserId?: string) {
   ensureConfigured();
   const supabase = getSupabaseAdminClient();
+  const previous = await supabase
+    .from("app_trips")
+    .select("*")
+    .eq("id", tripId)
+    .maybeSingle<AppTripRow>();
+
+  if (previous.error) {
+    throw new Error(`No se pudo validar viaje actual: ${previous.error.message}`);
+  }
 
   const basePayload = {
     slug: input.slug.trim().toLowerCase(),
@@ -561,6 +623,53 @@ export async function updateTripService(tripId: string, input: CreateTripInput) 
 
   if (error || !data) {
     throw new Error(`No se pudo actualizar viaje: ${error?.message ?? "sin datos"}`);
+  }
+
+  const wasPublished = previous.data?.publish_status === "published";
+  const isPublished = data.publish_status === "published";
+
+  if (!wasPublished && isPublished) {
+    await dispatchNotificationEventSafe({
+      eventType: "TRIP_PUBLISHED",
+      entityType: "trip",
+      entityId: data.id,
+      actorUserId,
+      recipients: { scope: "broadcast", audience: "users" },
+      channels: ["push", "email", "inbox"],
+      variables: {
+        tripTitle: data.title,
+        link: `/viajes/${data.slug}`
+      },
+      link: `/viajes/${data.slug}`,
+      metadata: {
+        source: "trip_publish_status_update"
+      },
+      dedupeKey: `trip-published:${data.id}:${data.updated_at}`
+    });
+  } else if (wasPublished && isPublished && previous.data) {
+    const meaningful = getMeaningfulTripPublicChanges(previous.data, data);
+    if (meaningful.hasMeaningfulChanges) {
+      await dispatchNotificationEventSafe({
+        eventType: "TRIP_BOOKING_UPDATED",
+        entityType: "trip",
+        entityId: data.id,
+        actorUserId,
+        recipients: { scope: "trip_slug", tripSlug: data.slug },
+        channels: ["inbox", "push", "email"],
+        variables: {
+          tripTitle: data.title,
+          summary: meaningful.summary,
+          link: `/viajes/${data.slug}`,
+          changedFields: meaningful.changedFields
+        },
+        link: `/viajes/${data.slug}`,
+        metadata: {
+          source: "trip_update",
+          changedFields: meaningful.changedFields
+        },
+        dedupeKey: `trip-update:${data.id}:${meaningful.changedFields.join("|")}:${data.updated_at}`
+      });
+    }
   }
 
   const hydrated = await hydrateTrips([data]);

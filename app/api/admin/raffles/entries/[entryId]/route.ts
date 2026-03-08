@@ -11,11 +11,11 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ entryId: string }> }
 ) {
-  await requireAdminServerAccess();
+  const auth = await requireAdminServerAccess();
   try {
     const { entryId } = await params;
     const payload = schema.parse(await request.json());
-    const entry = await updateRaffleEntryStatusService(entryId, payload.status);
+    const entry = await updateRaffleEntryStatusService(entryId, payload.status, auth.user?.id);
 
     if (!entry) {
       return NextResponse.json({ message: "Entrada no encontrada" }, { status: 404 });

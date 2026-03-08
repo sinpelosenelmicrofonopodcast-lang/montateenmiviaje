@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { capturePaypalOrder } from "@/lib/paypal";
+import { dispatchNotificationEventSafe } from "@/lib/notifications/orchestrator";
 import { getBookingService, markBookingPaidByOrderService } from "@/lib/runtime-service";
 
 const captureOrderSchema = z.object({
@@ -24,6 +25,26 @@ export async function POST(request: Request) {
     const result = await capturePaypalOrder(payload.orderId);
 
     if (result.status !== "COMPLETED") {
+      await dispatchNotificationEventSafe({
+        eventType: "PAYMENT_FAILED",
+        entityType: "booking",
+        entityId: booking.id,
+        recipients: { scope: "booking_id", bookingId: booking.id },
+        channels: ["inbox", "push", "email"],
+        variables: {
+          amount: booking.amount,
+          bookingId: booking.id,
+          link: "/portal/pagos"
+        },
+        link: "/portal/pagos",
+        metadata: {
+          source: "paypal_capture_non_completed",
+          status: result.status,
+          orderId: payload.orderId
+        },
+        dedupeKey: `paypal-payment-failed:${payload.orderId}:${result.status}`
+      });
+
       return NextResponse.json(
         { message: "La captura de PayPal no se completó", status: result.status },
         { status: 400 }

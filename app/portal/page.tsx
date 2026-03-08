@@ -7,6 +7,7 @@ import { requirePortalSession } from "@/lib/portal-auth";
 export const dynamic = "force-dynamic";
 
 const modules = [
+  { href: "/portal/notificaciones", label: "Notificaciones", helper: "Inbox interno, push y preferencias" },
   { href: "/portal/onboarding", label: "Onboarding", helper: "Completa tu perfil paso a paso" },
   { href: "/portal/perfil", label: "Mi perfil", helper: "Datos personales y preferencias" },
   { href: "/portal/viajeros", label: "Viajeros", helper: "Perfiles guardados tipo Expedia" },

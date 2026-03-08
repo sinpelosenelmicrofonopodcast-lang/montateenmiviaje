@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { createTripService, listTripsService } from "@/lib/catalog-service";
 
 const tripSchema = z.object({
@@ -31,6 +32,7 @@ const tripSchema = z.object({
 });
 
 export async function GET() {
+  await requireAdminServerAccess();
   try {
     const trips = await listTripsService();
     return NextResponse.json({ trips });
@@ -41,9 +43,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const auth = await requireAdminServerAccess();
   try {
     const payload = tripSchema.parse(await request.json());
-    const trip = await createTripService(payload);
+    const trip = await createTripService(payload, auth.user?.id);
     return NextResponse.json({ ok: true, trip });
   } catch (error) {
     if (error instanceof z.ZodError) {

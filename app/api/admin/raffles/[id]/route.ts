@@ -76,13 +76,13 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await requireAdminServerAccess();
+  const auth = await requireAdminServerAccess();
   try {
     const { id } = await params;
     const payload = schema.parse(await request.json());
     const raffle = payload.status && Object.keys(payload).length === 1
-      ? await updateRaffleStatusService(id, payload.status)
-      : await updateRaffleService(id, payload);
+      ? await updateRaffleStatusService(id, payload.status, auth.user?.id)
+      : await updateRaffleService(id, payload, auth.user?.id);
     if (!raffle) {
       return NextResponse.json({ message: "Sorteo no encontrado" }, { status: 404 });
     }

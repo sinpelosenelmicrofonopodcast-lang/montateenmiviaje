@@ -46,11 +46,10 @@ export function RaffleEntryForm({
   const [paymentScreenshotUrl, setPaymentScreenshotUrl] = useState("");
   const [uploadingProof, setUploadingProof] = useState(false);
   const [availableNumbers, setAvailableNumbers] = useState(initialAvailableNumbers);
-  const [chosenNumber, setChosenNumber] = useState<number | null>(null);
+  const [chosenNumbers, setChosenNumbers] = useState<number[]>([]);
   const [numberQuery, setNumberQuery] = useState("");
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [joined, setJoined] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,6 +74,12 @@ export function RaffleEntryForm({
     }
     return availableNumbers.filter((number) => String(number).includes(normalized));
   }, [availableNumbers, numberQuery]);
+
+  const selectedNumbersLabel = useMemo(() => {
+    if (chosenNumbers.length === 0) return "";
+    if (chosenNumbers.length <= 8) return chosenNumbers.map((value) => `#${value}`).join(", ");
+    return `${chosenNumbers.slice(0, 8).map((value) => `#${value}`).join(", ")} +${chosenNumbers.length - 8} más`;
+  }, [chosenNumbers]);
 
   const selectedMethodConfig = useMemo(() => {
     if (!enabledPaymentMethods.length) return null;
@@ -118,8 +123,8 @@ export function RaffleEntryForm({
 
   async function handleJoin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!chosenNumber) {
-      setError("Selecciona un número disponible.");
+    if (chosenNumbers.length === 0) {
+      setError("Selecciona uno o más números disponibles.");
       return;
     }
 
@@ -160,7 +165,7 @@ export function RaffleEntryForm({
         body: JSON.stringify({
           raffleId,
           customerEmail,
-          chosenNumber,
+          chosenNumbers,
           note: note.trim() || undefined,
           paymentReference: normalizedReference || undefined,
           phone: phone.trim(),
@@ -172,15 +177,23 @@ export function RaffleEntryForm({
         })
       });
 
-      const payload = (await response.json()) as { message?: string; entry?: { status: string } };
-      if (!response.ok || !payload.entry) {
+      const payload = (await response.json()) as {
+        message?: string;
+        total?: number;
+        entry?: { status: string };
+        entries?: Array<{ chosenNumber: number; status: string }>;
+      };
+      if (!response.ok || !payload.entries || payload.entries.length === 0) {
         throw new Error(payload.message ?? "No se pudo registrar participación");
       }
 
-      setSuccess(`Número #${chosenNumber} enviado correctamente. Estado: ${payload.entry.status}.`);
-      setJoined(true);
-      setAvailableNumbers((current) => current.filter((number) => number !== chosenNumber));
-      setChosenNumber(null);
+      setSuccess(
+        `Se enviaron ${payload.total ?? payload.entries.length} número(s): ${
+          payload.entries.map((item) => `#${item.chosenNumber}`).join(", ")
+        }. Estado: ${payload.entry?.status ?? payload.entries[0].status}.`
+      );
+      setAvailableNumbers((current) => current.filter((number) => !chosenNumbers.includes(number)));
+      setChosenNumbers([]);
       setPaymentReference("");
       setPaymentScreenshotUrl("");
       setNote("");
@@ -243,12 +256,22 @@ export function RaffleEntryForm({
             className="button-outline"
             onClick={() => {
               if (!availableNumbers.length) return;
-              const random = availableNumbers[Math.floor(Math.random() * availableNumbers.length)];
-              setChosenNumber(random);
+              const availableToPick = availableNumbers.filter((number) => !chosenNumbers.includes(number));
+              if (!availableToPick.length) return;
+              const random = availableToPick[Math.floor(Math.random() * availableToPick.length)];
+              setChosenNumbers((current) => [...current, random]);
             }}
-            disabled={noNumbersLeft || joined}
+            disabled={noNumbersLeft}
           >
             Número aleatorio
+          </button>
+          <button
+            type="button"
+            className="button-outline"
+            onClick={() => setChosenNumbers([])}
+            disabled={chosenNumbers.length === 0}
+          >
+            Limpiar selección
           </button>
         </div>
         <div className={styles.numberGrid}>
@@ -256,9 +279,14 @@ export function RaffleEntryForm({
             <button
               key={number}
               type="button"
-              className={`${styles.numberTile} ${chosenNumber === number ? styles.numberTileActive : ""}`}
-              onClick={() => setChosenNumber(number)}
-              disabled={joined}
+              className={`${styles.numberTile} ${chosenNumbers.includes(number) ? styles.numberTileActive : ""}`}
+              onClick={() => {
+                setChosenNumbers((current) => (
+                  current.includes(number)
+                    ? current.filter((value) => value !== number)
+                    : [...current, number]
+                ));
+              }}
             >
               #{number}
             </button>
@@ -267,9 +295,9 @@ export function RaffleEntryForm({
             <p className={styles.emptyNumbers}>No hay resultados con esa búsqueda.</p>
           ) : null}
         </div>
-        {chosenNumber ? (
+        {chosenNumbers.length > 0 ? (
           <p className={styles.selectionNotice}>
-            Tu número seleccionado: <strong>#{chosenNumber}</strong>
+            Números seleccionados (<strong>{chosenNumbers.length}</strong>): <strong>{selectedNumbersLabel}</strong>
           </p>
         ) : null}
       </section>
@@ -437,8 +465,8 @@ export function RaffleEntryForm({
       ) : null}
 
       <div className={styles.submitRow}>
-        <button className="button-dark" type="submit" disabled={loading || noNumbersLeft || joined}>
-          {loading ? "Enviando..." : noNumbersLeft ? "Números agotados" : joined ? "Participación enviada" : "Confirmar participación"}
+        <button className="button-dark" type="submit" disabled={loading || noNumbersLeft}>
+          {loading ? "Enviando..." : noNumbersLeft ? "Números agotados" : `Confirmar ${Math.max(chosenNumbers.length, 1)} número(s)`}
         </button>
       </div>
 

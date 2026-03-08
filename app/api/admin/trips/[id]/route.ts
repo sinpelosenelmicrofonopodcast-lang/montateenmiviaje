@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { deleteTripService, updateTripService } from "@/lib/catalog-service";
 
 const tripSchema = z.object({
@@ -34,10 +35,11 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAdminServerAccess();
   try {
     const { id } = await params;
     const payload = tripSchema.parse(await request.json());
-    const trip = await updateTripService(id, payload);
+    const trip = await updateTripService(id, payload, auth.user?.id);
     return NextResponse.json({ ok: true, trip });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -52,6 +54,7 @@ export async function DELETE(
   _: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  await requireAdminServerAccess();
   try {
     const { id } = await params;
     const result = await deleteTripService(id);

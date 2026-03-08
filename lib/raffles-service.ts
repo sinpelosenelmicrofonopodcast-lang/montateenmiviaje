@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { hasSupabaseConfig, getSupabaseAdminClient } from "@/lib/supabase-admin";
+import { dispatchNotificationEventSafe } from "@/lib/notifications/orchestrator";
 import {
   Customer,
   RaffleFaqItem,
@@ -823,6 +824,24 @@ function asRecord(value: unknown) {
   return {};
 }
 
+function isMissingColumnError(error: { code?: string | null; message?: string | null } | null | undefined) {
+  const code = (error?.code ?? "").toUpperCase();
+  const message = (error?.message ?? "").toLowerCase();
+
+  if (code === "42703" || code === "PGRST204") {
+    return true;
+  }
+
+  return (
+    message.includes("column")
+    && (
+      message.includes("does not exist")
+      || message.includes("could not find")
+      || message.includes("schema cache")
+    )
+  );
+}
+
 function toPublicDisplayName(entry: RaffleEntry, mode: RaffleParticipantsMode) {
   const source = entry.publicDisplayName || entry.customerEmail;
   const [first = "Participante", second = ""] = source.split(" ");
@@ -1174,7 +1193,7 @@ async function drawRaffleWinnerSupabase(
     .select("*")
     .single<AppRaffleRow>();
 
-  if (update.error && (update.error.code === "42703" || /column .* does not exist/i.test(update.error.message))) {
+  if (isMissingColumnError(update.error)) {
     delete updatePayload.draw_hash;
     delete updatePayload.winning_index;
     delete updatePayload.total_tickets;
@@ -1418,7 +1437,7 @@ export async function listAvailableRaffleNumbersService(raffleId: string) {
   return (numbers.data ?? []).map((item) => item.number_value);
 }
 
-export async function createRaffleService(input: CreateRaffleInput) {
+export async function createRaffleService(input: CreateRaffleInput, actorId?: string) {
   ensureConfigured();
 
   const startAt = new Date(input.startDate);
@@ -1545,7 +1564,7 @@ export async function createRaffleService(input: CreateRaffleInput) {
 
   let result = await supabase.from("app_raffles").insert(insertPayload).select("*").single<AppRaffleRow>();
 
-  if (result.error && (result.error.code === "42703" || /column .* does not exist/i.test(result.error.message))) {
+  if (isMissingColumnError(result.error)) {
     delete insertPayload.verification_version;
     delete insertPayload.verification_status;
     delete insertPayload.draw_secret;
@@ -1562,11 +1581,32 @@ export async function createRaffleService(input: CreateRaffleInput) {
 
   await logRaffleAdminAction({
     raffleId: result.data.id,
+    actorId,
     action: "raffle_created",
     entityType: "raffle",
     entityId: result.data.id,
     metadata: { title: result.data.title, numberPoolSize: result.data.number_pool_size }
   });
+
+  if (result.data.status === "published") {
+    await dispatchNotificationEventSafe({
+      eventType: "RAFFLE_PUBLISHED",
+      entityType: "raffle",
+      entityId: result.data.id,
+      actorUserId: actorId,
+      recipients: { scope: "broadcast", audience: "users" },
+      channels: ["push", "email", "inbox"],
+      variables: {
+        raffleTitle: result.data.title,
+        link: `/sorteos/${result.data.id}`
+      },
+      link: `/sorteos/${result.data.id}`,
+      metadata: {
+        source: "raffle_create"
+      },
+      dedupeKey: `raffle-published:${result.data.id}:${result.data.updated_at ?? now}`
+    });
+  }
 
   return mapRaffle(result.data);
 }
@@ -1574,7 +1614,7 @@ export async function createRaffleService(input: CreateRaffleInput) {
 export async function enterRaffleService(
   raffleId: string,
   customerEmail: string,
-  chosenNumber: number,
+  chosenNumbersInput: number[],
   note?: string,
   paymentReference?: string,
   options?: {
@@ -1605,8 +1645,19 @@ export async function enterRaffleService(
   if (!Number.isNaN(drawAt) && now >= drawAt) {
     throw new Error("El sorteo ya cerró participaciones");
   }
-  if (!Number.isInteger(chosenNumber) || chosenNumber < 1 || chosenNumber > raffle.number_pool_size) {
-    throw new Error(`El número debe estar entre 1 y ${raffle.number_pool_size}`);
+  const chosenNumbers = chosenNumbersInput
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value))
+    .filter((value, index, list) => list.indexOf(value) === index);
+
+  if (chosenNumbers.length === 0) {
+    throw new Error("Selecciona al menos un número disponible");
+  }
+  if (chosenNumbers.length > 20) {
+    throw new Error("Solo puedes seleccionar hasta 20 números por participación");
+  }
+  if (chosenNumbers.some((value) => value < 1 || value > raffle.number_pool_size)) {
+    throw new Error(`Los números deben estar entre 1 y ${raffle.number_pool_size}`);
   }
 
   await ensureRaffleNumbersSeeded(raffleId, raffle.number_pool_size);
@@ -1627,34 +1678,22 @@ export async function enterRaffleService(
     throw new Error("Debes estar registrado para participar");
   }
 
-  const existing = await supabase
-    .from("app_raffle_entries")
-    .select("id")
-    .eq("raffle_id", raffleId)
-    .eq("customer_id", customer.data.id)
-    .in("status", ["pending_payment", "pending_review", "confirmed"]) // mantiene compatibilidad
-    .maybeSingle<{ id: string }>();
-
-  if (existing.error) {
-    throw new Error(`Error validando participación: ${existing.error.message}`);
-  }
-  if (existing.data) {
-    throw new Error("Ya participas en este sorteo");
-  }
-
-  const numberRow = await supabase
+  const numberRows = await supabase
     .from("app_raffle_numbers")
-    .select("status")
+    .select("number_value,status")
     .eq("raffle_id", raffleId)
-    .eq("number_value", chosenNumber)
-    .maybeSingle<{ status: RaffleNumberStatus }>();
+    .in("number_value", chosenNumbers)
+    .returns<Array<{ number_value: number; status: RaffleNumberStatus }>>();
 
-  if (numberRow.error) {
-    throw new Error(`No se pudo validar el número: ${numberRow.error.message}`);
+  if (numberRows.error) {
+    throw new Error(`No se pudieron validar los números: ${numberRows.error.message}`);
   }
 
-  if (!numberRow.data || numberRow.data.status !== "available") {
-    throw new Error("Ese número ya no está disponible");
+  const numberStateMap = new Map((numberRows.data ?? []).map((row) => [row.number_value, row.status]));
+  const unavailable = chosenNumbers.filter((number) => numberStateMap.get(number) !== "available");
+
+  if (unavailable.length > 0) {
+    throw new Error(`Estos números ya no están disponibles: ${unavailable.map((value) => `#${value}`).join(", ")}`);
   }
 
   const raffleModel = mapRaffle(raffle);
@@ -1690,80 +1729,110 @@ export async function enterRaffleService(
   const referralCode = toReferralCode(customer.data.email);
   const paymentMethod = finalPaymentMethod;
 
-  const insert = await supabase
-    .from("app_raffle_entries")
-    .insert({
-      raffle_id: raffleId,
-      customer_id: customer.data.id,
-      customer_email: customer.data.email,
-      chosen_number: chosenNumber,
-      payment_reference: normalizedPaymentReference ?? null,
-      note: note ?? null,
-      status,
-      source: "online",
-      public_display_name: options?.publicDisplayName?.trim() || null,
-      consent_public_listing: options?.consentPublicListing ?? false,
-      payment_method: paymentMethod ?? null,
-      phone: normalizePhone(options?.phone) ?? null,
-      referral_code: referralCode,
-      referred_by_code: options?.referredByCode?.trim() || null,
-      updated_at: new Date().toISOString()
-    })
-    .select("*")
-    .single<AppRaffleEntryRow>();
+  const createdEntries: AppRaffleEntryRow[] = [];
 
-  if (insert.error || !insert.data) {
-    if (isUniqueViolation(insert.error)) {
-      throw new Error("Ese número ya fue seleccionado por otro participante");
+  for (const chosenNumber of chosenNumbers) {
+    const insert = await supabase
+      .from("app_raffle_entries")
+      .insert({
+        raffle_id: raffleId,
+        customer_id: customer.data.id,
+        customer_email: customer.data.email,
+        chosen_number: chosenNumber,
+        payment_reference: normalizedPaymentReference ?? null,
+        note: note ?? null,
+        status,
+        source: "online",
+        public_display_name: options?.publicDisplayName?.trim() || null,
+        consent_public_listing: options?.consentPublicListing ?? false,
+        payment_method: paymentMethod ?? null,
+        phone: normalizePhone(options?.phone) ?? null,
+        referral_code: referralCode,
+        referred_by_code: options?.referredByCode?.trim() || null,
+        updated_at: new Date().toISOString()
+      })
+      .select("*")
+      .single<AppRaffleEntryRow>();
+
+    if (insert.error || !insert.data) {
+      if (isUniqueViolation(insert.error)) {
+        if ((insert.error.message ?? "").includes("raffle_id_customer_id")) {
+          throw new Error("Tu base de datos aún no permite múltiples números por persona. Ejecuta la migración más reciente.");
+        }
+        throw new Error(`El número #${chosenNumber} ya fue seleccionado por otro participante`);
+      }
+
+      throw new Error(`No se pudo registrar participación #${chosenNumber}: ${insert.error?.message ?? "sin datos"}`);
     }
 
-    throw new Error(`No se pudo registrar participación: ${insert.error?.message ?? "sin datos"}`);
-  }
+    await syncNumberForEntry(insert.data, { paymentMethod, actorId: undefined });
 
-  await syncNumberForEntry(insert.data, { paymentMethod, actorId: undefined });
+    if (!raffle.is_free) {
+      const normalizedMethodForPayments = ensurePaymentMethod(paymentMethod);
+      const paymentInsert = await supabase.from("app_raffle_payments").insert({
+        raffle_id: raffle.id,
+        entry_id: insert.data.id,
+        customer_id: customer.data.id,
+        customer_email: customer.data.email,
+        amount: Number(raffle.entry_fee),
+        currency: "USD",
+        payment_method: normalizedMethodForPayments,
+        payment_reference: normalizedPaymentReference ?? null,
+        screenshot_url: normalizedScreenshotUrl ?? null,
+        is_manual: selectedMethodConfig ? !selectedMethodConfig.isAutomatic : true,
+        manually_verified: false,
+        status: "pending",
+        admin_note: selectedMethodConfig && normalizedMethodForPayments !== selectedMethodConfig.provider
+          ? `provider:${selectedMethodConfig.provider}`
+          : null,
+        created_by: null,
+        updated_at: new Date().toISOString()
+      });
 
-  if (!raffle.is_free) {
-    const normalizedMethodForPayments = ensurePaymentMethod(paymentMethod);
-    const paymentInsert = await supabase.from("app_raffle_payments").insert({
-      raffle_id: raffle.id,
-      entry_id: insert.data.id,
-      customer_id: customer.data.id,
-      customer_email: customer.data.email,
-      amount: Number(raffle.entry_fee),
-      currency: "USD",
-      payment_method: normalizedMethodForPayments,
-      payment_reference: normalizedPaymentReference ?? null,
-      screenshot_url: normalizedScreenshotUrl ?? null,
-      is_manual: selectedMethodConfig ? !selectedMethodConfig.isAutomatic : true,
-      manually_verified: false,
-      status: "pending",
-      admin_note: selectedMethodConfig && normalizedMethodForPayments !== selectedMethodConfig.provider
-        ? `provider:${selectedMethodConfig.provider}`
-        : null,
-      created_by: null,
-      updated_at: new Date().toISOString()
-    });
-
-    if (paymentInsert.error) {
-      console.error("No se pudo crear pago pendiente de rifa", paymentInsert.error.message);
+      if (paymentInsert.error) {
+        console.error("No se pudo crear pago pendiente de rifa", paymentInsert.error.message);
+      }
     }
-  }
 
-  if (options?.referredByCode?.trim()) {
-    const conversionEvent = await supabase.from("app_raffle_referral_events").insert({
-      raffle_id: raffleId,
-      referral_code: options.referredByCode.trim().toUpperCase(),
-      event_type: "conversion",
-      referred_entry_id: insert.data.id,
-      metadata_json: { source: "online", converted_email: insert.data.customer_email }
-    });
+    if (options?.referredByCode?.trim()) {
+      const conversionEvent = await supabase.from("app_raffle_referral_events").insert({
+        raffle_id: raffleId,
+        referral_code: options.referredByCode.trim().toUpperCase(),
+        event_type: "conversion",
+        referred_entry_id: insert.data.id,
+        metadata_json: { source: "online", converted_email: insert.data.customer_email }
+      });
 
-    if (conversionEvent.error) {
-      throw new Error(`No se pudo registrar conversión de referido: ${conversionEvent.error.message}`);
+      if (conversionEvent.error) {
+        throw new Error(`No se pudo registrar conversión de referido: ${conversionEvent.error.message}`);
+      }
     }
+
+    if (status === "confirmed") {
+      await dispatchNotificationEventSafe({
+        eventType: "RAFFLE_ENTRY_CONFIRMED",
+        entityType: "raffle_entry",
+        entityId: insert.data.id,
+        recipients: { scope: "raffle_entry_id", entryId: insert.data.id },
+        channels: ["inbox", "push", "email"],
+        variables: {
+          raffleTitle: raffle.title,
+          chosenNumber: insert.data.chosen_number,
+          link: `/sorteos/${raffleId}`
+        },
+        link: "/portal",
+        metadata: {
+          source: "raffle_entry_auto_confirmed",
+          raffleId
+        },
+        dedupeKey: `raffle-entry-confirmed:${insert.data.id}`
+      });
+    }
+
+    createdEntries.push(insert.data);
   }
 
-  return mapRaffleEntry(insert.data);
+  return createdEntries.map(mapRaffleEntry);
 }
 
 export async function updateRaffleEntryStatusService(entryId: string, status: RaffleEntryStatus, actorId?: string) {
@@ -1807,6 +1876,28 @@ export async function updateRaffleEntryStatusService(entryId: string, status: Ra
     metadata: { previousStatus: entry.status, nextStatus: status, chosenNumber: entry.chosen_number }
   });
 
+  if (status === "confirmed" && entry.status !== "confirmed") {
+    await dispatchNotificationEventSafe({
+      eventType: "RAFFLE_ENTRY_CONFIRMED",
+      entityType: "raffle_entry",
+      entityId: updated.data.id,
+      actorUserId: actorId,
+      recipients: { scope: "raffle_entry_id", entryId: updated.data.id },
+      channels: ["inbox", "push", "email"],
+      variables: {
+        raffleTitle: raffle.title,
+        chosenNumber: updated.data.chosen_number,
+        link: `/sorteos/${entry.raffle_id}`
+      },
+      link: "/portal",
+      metadata: {
+        source: "raffle_entry_status_update",
+        raffleId: entry.raffle_id
+      },
+      dedupeKey: `raffle-entry-confirmed:${updated.data.id}:status`
+    });
+  }
+
   return mapRaffleEntry(updated.data);
 }
 
@@ -1843,6 +1934,26 @@ export async function updateRaffleStatusService(raffleId: string, status: Raffle
       entityId: raffleId,
       metadata: { previousStatus: raffle.status, nextStatus: status }
     });
+
+    if (raffle.status !== "published") {
+      await dispatchNotificationEventSafe({
+        eventType: "RAFFLE_PUBLISHED",
+        entityType: "raffle",
+        entityId: raffleId,
+        actorUserId: actorId,
+        recipients: { scope: "broadcast", audience: "users" },
+        channels: ["push", "email", "inbox"],
+        variables: {
+          raffleTitle: updated.data.title,
+          link: `/sorteos/${raffleId}`
+        },
+        link: `/sorteos/${raffleId}`,
+        metadata: {
+          source: "raffle_status_publish"
+        },
+        dedupeKey: `raffle-published:${raffleId}:${updated.data.updated_at}`
+      });
+    }
 
     return mapRaffle(current);
   }
@@ -2064,6 +2175,26 @@ export async function updateRaffleService(
     entityId: raffleId,
     metadata: { updatedFields: Object.keys(input) }
   });
+
+  if (current.status !== "published" && updated.data.status === "published") {
+    await dispatchNotificationEventSafe({
+      eventType: "RAFFLE_PUBLISHED",
+      entityType: "raffle",
+      entityId: raffleId,
+      actorUserId: actorId,
+      recipients: { scope: "broadcast", audience: "users" },
+      channels: ["push", "email", "inbox"],
+      variables: {
+        raffleTitle: updated.data.title,
+        link: `/sorteos/${raffleId}`
+      },
+      link: `/sorteos/${raffleId}`,
+      metadata: {
+        source: "raffle_update_publish_transition"
+      },
+      dedupeKey: `raffle-published:${raffleId}:${updated.data.updated_at}`
+    });
+  }
 
   return mapRaffle(updated.data);
 }
@@ -2382,6 +2513,56 @@ export async function updateRafflePaymentManualStatusService(input: {
       manuallyVerified: input.manuallyVerified
     }
   });
+
+  const paymentRecipients = updated.data.entry_id
+    ? { scope: "raffle_entry_id" as const, entryId: updated.data.entry_id }
+    : {
+        scope: "emails" as const,
+        emails: [updated.data.customer_email].filter(
+          (email): email is string => typeof email === "string" && email.trim().length > 0
+        )
+      };
+
+  if (input.status === "approved") {
+    await dispatchNotificationEventSafe({
+      eventType: "PAYMENT_CONFIRMED",
+      entityType: "raffle_payment",
+      entityId: input.paymentId,
+      actorUserId: input.actorId,
+      recipients: paymentRecipients,
+      channels: ["inbox", "push", "email"],
+      variables: {
+        amount: Number(updated.data.amount),
+        link: "/portal/pagos"
+      },
+      link: "/portal/pagos",
+      metadata: {
+        source: "raffle_manual_payment_approved",
+        raffleId: existing.data.raffle_id
+      },
+      dedupeKey: `raffle-payment:${input.paymentId}:approved:${updated.data.updated_at}`
+    });
+  } else {
+    await dispatchNotificationEventSafe({
+      eventType: "PAYMENT_FAILED",
+      entityType: "raffle_payment",
+      entityId: input.paymentId,
+      actorUserId: input.actorId,
+      recipients: paymentRecipients,
+      channels: ["inbox", "push", "email"],
+      variables: {
+        amount: Number(updated.data.amount),
+        link: "/portal/pagos"
+      },
+      link: "/portal/pagos",
+      metadata: {
+        source: "raffle_manual_payment_not_approved",
+        raffleId: existing.data.raffle_id,
+        status: input.status
+      },
+      dedupeKey: `raffle-payment:${input.paymentId}:${input.status}:${updated.data.updated_at}`
+    });
+  }
 
   return mapRafflePayment(updated.data);
 }
@@ -2707,7 +2888,7 @@ export async function prepareVerifiedRaffleService(raffleId: string, actorId?: s
     .select("*")
     .single<AppRaffleRow>();
 
-  if (updated.error && (updated.error.code === "42703" || /column .* does not exist/i.test(updated.error.message))) {
+  if (isMissingColumnError(updated.error)) {
     delete updatePayload.draw_secret;
     delete updatePayload.verification_version;
     delete updatePayload.verification_status;
@@ -2765,7 +2946,7 @@ export async function closeRaffleSalesService(raffleId: string, actorId?: string
     .select("*")
     .single<AppRaffleRow>();
 
-  if (updated.error && (updated.error.code === "42703" || /column .* does not exist/i.test(updated.error.message))) {
+  if (isMissingColumnError(updated.error)) {
     delete updatePayload.sales_closed_at;
     delete updatePayload.verification_status;
     updated = await supabase
@@ -2823,7 +3004,7 @@ export async function publishRaffleWinnerService(raffleId: string, actorId?: str
     .select("*")
     .single<AppRaffleRow>();
 
-  if (updated.error && (updated.error.code === "42703" || /column .* does not exist/i.test(updated.error.message))) {
+  if (isMissingColumnError(updated.error)) {
     delete updatePayload.winner_published_at;
     delete updatePayload.verification_status;
     updated = await supabase

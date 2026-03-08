@@ -58,6 +58,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
     key: "settings",
     title: "Configuración",
     items: [
+      { href: "/admin/notificaciones", label: "Notificaciones", helper: "Eventos, deliveries y envíos manuales" },
       { href: "/admin/automatizaciones", label: "Automatizaciones", helper: "Reglas y ejecuciones" },
       { href: "/admin/configuracion", label: "Configuración", helper: "Integraciones y branding" },
       { href: "/admin/settings", label: "Seguridad", helper: "Políticas y controles de acceso" }

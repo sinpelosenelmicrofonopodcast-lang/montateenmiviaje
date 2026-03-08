@@ -13,7 +13,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ paymentId: string }> }
 ) {
-  await requireAdminServerAccess();
+  const auth = await requireAdminServerAccess();
   try {
     const { paymentId } = await params;
     const payload = schema.parse(await request.json());
@@ -22,7 +22,8 @@ export async function PATCH(
       paymentId,
       status: payload.status,
       manuallyVerified: payload.manuallyVerified,
-      adminNote: payload.adminNote
+      adminNote: payload.adminNote,
+      actorId: auth.user?.id
     });
 
     return NextResponse.json({ ok: true, payment });

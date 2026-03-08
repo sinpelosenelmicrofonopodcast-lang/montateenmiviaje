@@ -8,6 +8,7 @@ import styles from "./raffle-verification-panel.module.css";
 interface RaffleVerificationPanelProps {
   raffleId: string;
   initialVerification: RaffleVerificationResult;
+  showExplainer?: boolean;
 }
 
 function formatDate(value?: string) {
@@ -31,7 +32,11 @@ function toBadgeClass(status: RaffleVerificationResult["status"]) {
   return `${styles.badge} ${styles.badge_failed}`;
 }
 
-export function RaffleVerificationPanel({ raffleId, initialVerification }: RaffleVerificationPanelProps) {
+export function RaffleVerificationPanel({
+  raffleId,
+  initialVerification,
+  showExplainer = true
+}: RaffleVerificationPanelProps) {
   const [verification, setVerification] = useState(initialVerification);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -132,23 +137,25 @@ export function RaffleVerificationPanel({ raffleId, initialVerification }: Raffl
         </p>
       </div>
 
-      <article className={styles.explainer}>
-        <h4>Cómo sabes que este sorteo no fue manipulado</h4>
-        <p>
-          Antes de sacar el ganador, el sistema publica una huella digital única. Cuando se cierra la rifa, se revela
-          la clave original usada para generar el resultado. Con esos datos, cualquier persona puede comprobar que el
-          número ganador salió de forma matemática y que no fue cambiado después.
-        </p>
-        <details className={styles.details}>
-          <summary>Ver explicación técnica</summary>
+      {showExplainer ? (
+        <article className={styles.explainer}>
+          <h4>Cómo sabes que este sorteo no fue manipulado</h4>
           <p>
-            1) Se calcula <strong>commit hash = SHA256(clave)</strong>. 2) Al cerrar ventas se usa
-            <strong> SHA256(clave:raffle_id:close_timestamp:total_tickets)</strong> para obtener el draw hash.
-            3) El índice ganador es <strong>hash modulo total_tickets</strong>. 4) Ese índice se mapea al número
-            elegible ordenado de menor a mayor.
+            Antes de sacar el ganador, el sistema publica una huella digital única. Cuando se cierra la rifa, se revela
+            la clave original usada para generar el resultado. Con esos datos, cualquier persona puede comprobar que el
+            número ganador salió de forma matemática y que no fue cambiado después.
           </p>
-        </details>
-      </article>
+          <details className={styles.details}>
+            <summary>Ver explicación técnica</summary>
+            <p>
+              1) Se calcula <strong>commit hash = SHA256(clave)</strong>. 2) Al cerrar ventas se usa
+              <strong> SHA256(clave:raffle_id:close_timestamp:total_tickets)</strong> para obtener el draw hash.
+              3) El índice ganador es <strong>hash modulo total_tickets</strong>. 4) Ese índice se mapea al número
+              elegible ordenado de menor a mayor.
+            </p>
+          </details>
+        </article>
+      ) : null}
 
       {error ? <p className="error">{error}</p> : null}
     </section>

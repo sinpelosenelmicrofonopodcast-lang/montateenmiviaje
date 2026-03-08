@@ -1,4 +1,5 @@
 import { addDays, addMonths } from "@/lib/date-utils";
+import { dispatchNotificationEventSafe } from "@/lib/notifications/orchestrator";
 import { getSupabaseAdminClient, hasSupabaseConfig } from "@/lib/supabase-admin";
 import {
   AutomationRun,
@@ -219,6 +220,43 @@ function normalizeEmail(email: string) {
 
 function parseMoney(value: number | string | null | undefined) {
   return Number(value ?? 0);
+}
+
+function getBookingStageLabel(stage: BookingStage) {
+  switch (stage) {
+    case "lead":
+      return "Lead";
+    case "contactado":
+      return "Contactado";
+    case "reservado":
+      return "Reservado";
+    case "deposito_pagado":
+      return "Depósito pagado";
+    case "pagado_parcial":
+      return "Pago parcial";
+    case "pagado_total":
+      return "Pago total";
+    case "completado":
+      return "Completado";
+    case "cancelado":
+      return "Cancelado";
+    default:
+      return stage;
+  }
+}
+
+function getMeaningfulBookingStageChange(previous: BookingStage, next: BookingStage) {
+  if (previous === next) {
+    return {
+      hasMeaningfulChanges: false,
+      summary: ""
+    };
+  }
+
+  return {
+    hasMeaningfulChanges: true,
+    summary: `Tu reserva cambió de ${getBookingStageLabel(previous)} a ${getBookingStageLabel(next)}.`
+  };
 }
 
 function parseInstallmentCount(paymentPlan: string) {
@@ -667,7 +705,7 @@ export async function listBookingsService() {
   return (result.data ?? []).map(mapBooking);
 }
 
-export async function updateBookingStageService(bookingId: string, stage: BookingStage) {
+export async function updateBookingStageService(bookingId: string, stage: BookingStage, actorUserId?: string) {
   ensureConfigured();
   const supabase = getSupabaseAdminClient();
 
@@ -696,6 +734,31 @@ export async function updateBookingStageService(bookingId: string, stage: Bookin
   }
 
   await updateCustomerPipeline(updated.data.customer_id, stage);
+
+  const change = getMeaningfulBookingStageChange(current.data.status, stage);
+  if (change.hasMeaningfulChanges) {
+    await dispatchNotificationEventSafe({
+      eventType: "TRIP_BOOKING_UPDATED",
+      entityType: "booking",
+      entityId: updated.data.id,
+      actorUserId,
+      recipients: { scope: "booking_id", bookingId: updated.data.id },
+      channels: ["inbox", "push", "email"],
+      variables: {
+        bookingId: updated.data.id,
+        summary: change.summary,
+        link: "/portal/mis-viajes"
+      },
+      link: "/portal/mis-viajes",
+      metadata: {
+        source: "booking_stage_update",
+        previousStage: current.data.status,
+        nextStage: stage
+      },
+      dedupeKey: `booking-stage:${updated.data.id}:${stage}:${updated.data.updated_at}`
+    });
+  }
+
   return mapBooking(updated.data);
 }
 
@@ -942,6 +1005,29 @@ export async function markBookingPaidByOrderService(orderId: string) {
   if (bookingUpdate.error || !bookingUpdate.data) {
     throw new Error(`No se pudo actualizar estado de reserva: ${bookingUpdate.error?.message ?? "sin datos"}`);
   }
+
+  const confirmedAmount = depositPaymentResult.data ? Number(depositPaymentResult.data.amount) : booking.amount;
+
+  await dispatchNotificationEventSafe({
+    eventType: "PAYMENT_CONFIRMED",
+    entityType: "booking",
+    entityId: booking.id,
+    recipients: { scope: "booking_id", bookingId: booking.id },
+    channels: ["inbox", "push", "email"],
+    variables: {
+      amount: confirmedAmount,
+      bookingId: booking.id,
+      tripTitle: booking.tripSlug,
+      link: "/portal/pagos"
+    },
+    link: "/portal/pagos",
+    metadata: {
+      source: "paypal_capture",
+      orderId,
+      bookingId: booking.id
+    },
+    dedupeKey: `paypal-payment-confirmed:${orderId}`
+  });
 
   await Promise.all([
     updateCustomerPipeline(booking.customerId, nextStage),

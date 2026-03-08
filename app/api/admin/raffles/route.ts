@@ -104,10 +104,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  await requireAdminServerAccess();
+  const auth = await requireAdminServerAccess();
   try {
     const payload = createSchema.parse(await request.json());
-    const raffle = await createRaffleService(payload);
+    const raffle = await createRaffleService(payload, auth.user?.id);
     return NextResponse.json({ ok: true, raffle });
   } catch (error) {
     if (error instanceof z.ZodError) {

@@ -6,7 +6,8 @@ import { enterRaffleService, listRafflesService } from "@/lib/raffles-service";
 const joinSchema = z.object({
   raffleId: z.string().uuid(),
   customerEmail: z.string().email(),
-  chosenNumber: z.number().int().positive(),
+  chosenNumber: z.number().int().positive().optional(),
+  chosenNumbers: z.array(z.number().int().positive()).max(20).optional(),
   note: z.string().max(400).optional(),
   paymentReference: z.string().max(120).optional(),
   referredByCode: z.string().max(40).optional(),
@@ -15,6 +16,14 @@ const joinSchema = z.object({
   paymentMethod: z.string().max(40).optional(),
   paymentScreenshotUrl: z.string().max(1000).optional(),
   phone: z.string().max(50).optional()
+}).superRefine((value, ctx) => {
+  if ((!value.chosenNumbers || value.chosenNumbers.length === 0) && !value.chosenNumber) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["chosenNumbers"],
+      message: "Debes seleccionar al menos un número."
+    });
+  }
 });
 
 function sanitizePublicRaffle(raffle: Raffle) {
@@ -38,10 +47,16 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const payload = joinSchema.parse(await request.json());
-    const entry = await enterRaffleService(
+    const chosenNumbers = payload.chosenNumbers && payload.chosenNumbers.length > 0
+      ? payload.chosenNumbers
+      : payload.chosenNumber
+        ? [payload.chosenNumber]
+        : [];
+
+    const entries = await enterRaffleService(
       payload.raffleId,
       payload.customerEmail,
-      payload.chosenNumber,
+      chosenNumbers,
       payload.note,
       payload.paymentReference,
       {
@@ -53,7 +68,12 @@ export async function POST(request: Request) {
         phone: payload.phone
       }
     );
-    return NextResponse.json({ ok: true, entry });
+    return NextResponse.json({
+      ok: true,
+      entries,
+      entry: entries[0] ?? null,
+      total: entries.length
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ message: "Payload inválido", issues: error.issues }, { status: 400 });

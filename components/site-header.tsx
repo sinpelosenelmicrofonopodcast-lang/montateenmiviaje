@@ -4,6 +4,7 @@ import { isAdminRole } from "@/lib/admin-auth";
 import { getServerAuthContext } from "@/lib/admin-guard";
 import { getSiteSettingService } from "@/lib/cms-service";
 import { toPublicImageSrc } from "@/lib/image-url";
+import { getUnreadNotificationCountService } from "@/lib/notifications/service";
 import { HeaderLogoutButton } from "@/components/header-logout-button";
 
 const primaryLinks = [
@@ -36,10 +37,16 @@ export async function SiteHeader() {
   const logoUrl = toPublicImageSrc(readString(identity.logoUrl, "/logo-header.png"), "/logo-header.png");
   const isLoggedIn = Boolean(auth.user);
   const isAdmin = isAdminRole(auth.role);
+  const unreadNotifications = auth.user ? await getUnreadNotificationCountService(auth.user.id) : 0;
 
   const accountLinks = isLoggedIn
     ? [
-        ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : [{ href: "/portal", label: "Portal" }]),
+        ...(isAdmin
+          ? [{ href: "/admin", label: "Admin" }]
+          : [
+              { href: "/portal", label: "Portal" },
+              { href: "/portal/notificaciones", label: unreadNotifications > 0 ? `Alertas (${unreadNotifications})` : "Alertas" }
+            ]),
         { href: "/dashboard", label: "Mi panel" }
       ]
     : [

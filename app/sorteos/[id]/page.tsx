@@ -361,7 +361,7 @@ export default async function SorteoDetailPage({ params }: SorteoDetailPageProps
           </section>
         ) : null}
 
-        <RaffleVerificationPanel raffleId={raffle.id} initialVerification={verificationResult} />
+        <RaffleVerificationPanel raffleId={raffle.id} initialVerification={verificationResult} showExplainer={false} />
 
         <section className="card">
           <h3>Preguntas frecuentes</h3>

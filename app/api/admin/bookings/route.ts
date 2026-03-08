@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { listBookingsService, updateBookingStageService } from "@/lib/runtime-service";
 
 const updateSchema = z.object({
@@ -17,14 +18,16 @@ const updateSchema = z.object({
 });
 
 export async function GET() {
+  await requireAdminServerAccess();
   const bookings = await listBookingsService();
   return NextResponse.json({ bookings });
 }
 
 export async function PATCH(request: Request) {
+  const auth = await requireAdminServerAccess();
   try {
     const payload = updateSchema.parse(await request.json());
-    const booking = await updateBookingStageService(payload.bookingId, payload.stage);
+    const booking = await updateBookingStageService(payload.bookingId, payload.stage, auth.user?.id);
 
     if (!booking) {
       return NextResponse.json({ message: "Reserva no encontrada" }, { status: 404 });

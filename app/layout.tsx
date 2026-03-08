@@ -4,6 +4,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { WhatsAppFloat } from "@/components/whatsapp-float";
 import { OneSignalInit } from "@/components/custom/onesignal-init";
+import { OneSignalUserSync } from "@/components/custom/onesignal-user-sync";
 import { getSiteSettingService } from "@/lib/cms-service";
 
 function readString(value: unknown, fallback: string) {
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es">
       <body>
         <OneSignalInit />
+        <OneSignalUserSync />
         <SiteHeader />
         {children}
         <SiteFooter />
