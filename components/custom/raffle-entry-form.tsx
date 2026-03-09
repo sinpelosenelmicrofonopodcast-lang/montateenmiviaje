@@ -114,6 +114,9 @@ export function RaffleEntryForm({
   const isAutomaticPayPalFlow = !isFree
     && selectedMethodConfig?.provider === "paypal"
     && selectedMethodConfig.isAutomatic;
+  const isSingleAutomaticPaypalMode = !isFree
+    && enabledPaymentMethods.length === 1
+    && isAutomaticPayPalFlow;
 
   useEffect(() => {
     if (!enabledPaymentMethods.length) {
@@ -484,10 +487,10 @@ export function RaffleEntryForm({
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
             <h4>3) Método de pago</h4>
-            <p>Selecciona cómo pagar y sigue instrucciones.</p>
+            <p>{isSingleAutomaticPaypalMode ? "Checkout seguro con PayPal API." : "Selecciona cómo pagar y sigue instrucciones."}</p>
           </div>
-          {compact ? null : <p className={styles.instructions}><strong>Instrucciones:</strong> {paymentInstructions}</p>}
-          {enabledPaymentMethods.length > 0 ? (
+          {compact || isSingleAutomaticPaypalMode ? null : <p className={styles.instructions}><strong>Instrucciones:</strong> {paymentInstructions}</p>}
+          {enabledPaymentMethods.length > 0 && !isSingleAutomaticPaypalMode ? (
             <div className={styles.paymentMethodGrid}>
               {enabledPaymentMethods.map((method) => (
                 <button
@@ -513,10 +516,10 @@ export function RaffleEntryForm({
             <div className={styles.paymentDetail}>
               <p><strong>Método seleccionado:</strong> {selectedMethodConfig.label}</p>
               {selectedMethodConfig.instructions ? <p className="muted">{selectedMethodConfig.instructions}</p> : null}
-              {selectedMethodConfig.destinationValue ? (
+              {selectedMethodConfig.destinationValue && !isAutomaticPayPalFlow ? (
                 <p><strong>Destino de pago:</strong> {selectedMethodConfig.destinationValue}</p>
               ) : null}
-              {selectedMethodConfig.href ? (
+              {selectedMethodConfig.href && !isAutomaticPayPalFlow ? (
                 <a className="button-outline" href={selectedMethodConfig.href} target="_blank" rel="noreferrer">
                   Ir al enlace de pago
                 </a>
@@ -524,7 +527,7 @@ export function RaffleEntryForm({
             </div>
           ) : null}
 
-          {fallbackPaymentMethods.length > 0 ? (
+          {fallbackPaymentMethods.length > 0 && !isAutomaticPayPalFlow ? (
             <PaymentMethodLinks methods={fallbackPaymentMethods} note={paymentNote} title="Opciones de pago activas" />
           ) : null}
 
@@ -578,7 +581,7 @@ export function RaffleEntryForm({
               : isAutomaticPayPalFlow
                 ? reservationGroupId
                   ? "Reserva creada"
-                  : "Preparar pago PayPal"
+                  : "Reservar y pagar con PayPal"
                 : compact
                   ? "Confirmar participación"
                   : `Confirmar ${Math.max(chosenNumbers.length, 1)} número(s)`}

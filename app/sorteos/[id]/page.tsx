@@ -15,6 +15,7 @@ import {
 } from "@/lib/raffles-service";
 import { getServerAuthContext } from "@/lib/admin-guard";
 import { normalizeWhatsAppLink } from "@/lib/social-links";
+import { RafflePaymentMethodConfig } from "@/lib/types";
 import styles from "./raffle-page.module.css";
 
 interface SorteoDetailPageProps {
@@ -55,6 +56,26 @@ export default async function SorteoDetailPage({ params }: SorteoDetailPageProps
   const canParticipate = raffle.status === "published" && !raffle.drawnAt;
 
   const rafflePaymentMethods = (raffle.paymentMethods ?? []).filter((method) => method.enabled);
+  const configuredPayPalMethod = rafflePaymentMethods.find((method) => method.provider === "paypal");
+  const checkoutPaymentMethods: RafflePaymentMethodConfig[] = raffle.isFree
+    ? rafflePaymentMethods
+    : [
+        {
+          provider: "paypal",
+          enabled: true,
+          label: configuredPayPalMethod?.label || "PayPal",
+          instructions:
+            configuredPayPalMethod?.instructions
+            || "Pago seguro con PayPal. Tus números se asignan automáticamente al confirmar la captura.",
+          destinationValue: configuredPayPalMethod?.destinationValue,
+          href: configuredPayPalMethod?.href,
+          displayOrder: 1,
+          requiresReference: false,
+          requiresScreenshot: false,
+          isAutomatic: true,
+          config: configuredPayPalMethod?.config
+        }
+      ];
   const paymentLinks = rafflePaymentMethods
     .filter((method) => method.href)
     .map((method) => ({
@@ -134,8 +155,8 @@ export default async function SorteoDetailPage({ params }: SorteoDetailPageProps
             raffleId={raffle.id}
             isFree={raffle.isFree}
             paymentInstructions={raffle.paymentInstructions}
-            paymentMethods={rafflePaymentMethods}
-            paymentLinks={activePaymentMethodsWithLink}
+            paymentMethods={checkoutPaymentMethods}
+            paymentLinks={raffle.isFree ? activePaymentMethodsWithLink : []}
             paymentNote={raffle.paymentLinksNote ?? paymentConfig.note}
             initialAvailableNumbers={availableNumbers}
             numberStates={summary.numbers.map((item) => ({ number: item.number, status: item.status }))}

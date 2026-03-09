@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { RaffleEntryForm } from "@/components/custom/raffle-entry-form";
 import { RaffleNumberPicker } from "@/components/custom/raffle-number-picker";
-import { PaymentMethodLinks } from "@/components/payment-method-links";
 import { PaymentMethodLink } from "@/lib/payment-links";
 import { RaffleNumberStatus, RafflePaymentMethodConfig } from "@/lib/types";
 
@@ -52,14 +51,6 @@ export function RaffleConversionFlow({
         selectedNumbers={selectedNumbers}
         onSelectedNumbersChange={setSelectedNumbers}
       />
-
-      {!isFree && quickPaymentMethods.length > 0 ? (
-        <PaymentMethodLinks
-          methods={quickPaymentMethods}
-          note={paymentNote}
-          title="Métodos de pago"
-        />
-      ) : null}
 
       <section id="participar" className="card">
         <h3>Confirma tu participación</h3>
