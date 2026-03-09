@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RafflePayPalButton } from "@/components/raffle-paypal-button";
 import { PaymentMethodLinks } from "@/components/payment-method-links";
 import { PaymentMethodLink } from "@/lib/payment-links";
@@ -66,6 +66,7 @@ export function RaffleEntryForm({
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const paypalCheckoutRef = useRef<HTMLDivElement | null>(null);
 
   const chosenNumbers = selectedNumbersProp ?? internalChosenNumbers;
 
@@ -144,6 +145,21 @@ export function RaffleEntryForm({
     setReservedAmount(null);
   }, [isAutomaticPayPalFlow, reservationGroupId]);
 
+  useEffect(() => {
+    if (!reservationGroupId) {
+      return;
+    }
+    paypalCheckoutRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [reservationGroupId]);
+
+  async function releaseReservedGroup(groupId: string, reason: "cancelled" | "failed" = "failed") {
+    await fetch("/api/raffles/release-reservation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reservationGroupId: groupId, reason })
+    });
+  }
+
   async function handleProofUpload(file: File) {
     setUploadingProof(true);
     setError(null);
@@ -207,6 +223,10 @@ export function RaffleEntryForm({
 
     try {
       if (isAutomaticPayPalFlow) {
+        if (!process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID) {
+          throw new Error("PayPal no está configurado en este momento. Intenta nuevamente en unos minutos.");
+        }
+
         const reserveResponse = await fetch("/api/raffles/reserve-numbers", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -243,7 +263,7 @@ export function RaffleEntryForm({
               hour: "2-digit",
               minute: "2-digit"
             })
-          }.`
+          }. Haz clic en el botón PayPal para continuar.`
         );
         return;
       }
@@ -589,7 +609,7 @@ export function RaffleEntryForm({
       </div>
 
       {isAutomaticPayPalFlow && reservationGroupId ? (
-        <div className={styles.paymentDetail}>
+        <div ref={paypalCheckoutRef} className={styles.paymentDetail}>
           <p><strong>Reserva lista para pagar:</strong> {selectedNumbersLabel}</p>
           {reservedAmount !== null ? <p><strong>Total:</strong> {reservedAmount.toFixed(2)} USD</p> : null}
           {reservationExpiresAt ? (
@@ -619,6 +639,20 @@ export function RaffleEntryForm({
               setReservationExpiresAt(null);
               setReservedAmount(null);
               setError("Pago cancelado. Tus números fueron liberados.");
+            }}
+            onUnavailable={(message) => {
+              void (async () => {
+                try {
+                  await releaseReservedGroup(reservationGroupId, "failed");
+                } catch {
+                  // noop
+                } finally {
+                  setReservationGroupId(null);
+                  setReservationExpiresAt(null);
+                  setReservedAmount(null);
+                  setError(`No se pudo iniciar PayPal: ${message}`);
+                }
+              })();
             }}
           />
         </div>

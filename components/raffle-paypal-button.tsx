@@ -13,9 +13,16 @@ interface RafflePayPalButtonProps {
     idempotent?: boolean;
   }) => void;
   onCancelled?: () => void;
+  onUnavailable?: (message: string) => void;
 }
 
-export function RafflePayPalButton({ reservationGroupId, disabled, onPaid, onCancelled }: RafflePayPalButtonProps) {
+export function RafflePayPalButton({
+  reservationGroupId,
+  disabled,
+  onPaid,
+  onCancelled,
+  onUnavailable
+}: RafflePayPalButtonProps) {
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const buttonContainerId = useMemo(
@@ -60,7 +67,15 @@ export function RafflePayPalButton({ reservationGroupId, disabled, onPaid, onCan
 
               const payload = (await response.json()) as { message?: string; orderId?: string };
               if (!response.ok || !payload.orderId) {
-                throw new Error(payload.message ?? "No se pudo crear la orden de PayPal");
+                const message = payload.message ?? "No se pudo crear la orden de PayPal";
+                if (
+                  message.toLowerCase().includes("reserva")
+                  || message.toLowerCase().includes("expir")
+                  || message.toLowerCase().includes("migración")
+                ) {
+                  onUnavailable?.(message);
+                }
+                throw new Error(message);
               }
 
               return payload.orderId;
@@ -107,6 +122,7 @@ export function RafflePayPalButton({ reservationGroupId, disabled, onPaid, onCan
       } catch (setupError) {
         const message = setupError instanceof Error ? setupError.message : "Error desconocido";
         setError(message);
+        onUnavailable?.(message);
       }
     }
 
@@ -119,7 +135,7 @@ export function RafflePayPalButton({ reservationGroupId, disabled, onPaid, onCan
         container.innerHTML = "";
       }
     };
-  }, [buttonContainerId, disabled, onCancelled, onPaid, reservationGroupId]);
+  }, [buttonContainerId, disabled, onCancelled, onPaid, onUnavailable, reservationGroupId]);
 
   return (
     <div className="paypal-shell">

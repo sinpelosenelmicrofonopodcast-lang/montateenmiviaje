@@ -1013,6 +1013,26 @@ function isMissingColumnError(error: { code?: string | null; message?: string | 
   );
 }
 
+function extractMissingColumnName(error: { message?: string | null } | null | undefined) {
+  const message = error?.message ?? "";
+  if (!message) return null;
+
+  const patterns = [
+    /column\s+["']?([a-zA-Z0-9_]+)["']?\s+(?:of\s+relation\s+["'][^"']+["']\s+)?does not exist/i,
+    /could not find the ['"]?([a-zA-Z0-9_]+)['"]?\s+column/i,
+    /record\s+"[^"]+"\s+has no field\s+"([a-zA-Z0-9_]+)"/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = message.match(pattern);
+    if (match?.[1]) {
+      return match[1].trim();
+    }
+  }
+
+  return null;
+}
+
 function isMissingPayPalRaffleRpcError(error: { code?: string | null; message?: string | null } | null | undefined) {
   const code = (error?.code ?? "").toUpperCase();
   const message = (error?.message ?? "").toLowerCase();
@@ -1509,6 +1529,67 @@ async function processReservationExpirationsSupabase(options?: {
           nextStatus: updateResult.data.status
         }
       });
+    }
+
+    // Self-heal for legacy pending PayPal rows created without reservation_expires_at.
+    const stalePendingCutoffIso = new Date(now.getTime() - 30 * 60_000).toISOString();
+    const stalePendingRows = await supabase
+      .from("app_raffle_entries")
+      .select("*")
+      .eq("status", "pending_payment")
+      .eq("payment_method", "paypal")
+      .is("reservation_expires_at", null)
+      .lte("created_at", stalePendingCutoffIso)
+      .order("created_at", { ascending: true })
+      .returns<AppRaffleEntryRow[]>();
+
+    if (stalePendingRows.error && !isMissingColumnError(stalePendingRows.error)) {
+      throw new Error(`No se pudieron buscar reservas legacy colgadas: ${stalePendingRows.error.message}`);
+    }
+
+    for (const entry of stalePendingRows.data ?? []) {
+      const updateResult = await supabase
+        .from("app_raffle_entries")
+        .update({
+          status: "expired",
+          released_at: nowIso,
+          released_reason: "reserva_legacy_sin_expiracion",
+          released_by: options?.actorId ?? null,
+          updated_at: nowIso
+        })
+        .eq("id", entry.id)
+        .eq("status", "pending_payment")
+        .select("*")
+        .maybeSingle<AppRaffleEntryRow>();
+
+      if (updateResult.error) {
+        throw new Error(`No se pudo liberar reserva legacy ${entry.id}: ${updateResult.error.message}`);
+      }
+
+      if (!updateResult.data) {
+        continue;
+      }
+
+      await syncNumberForEntry(updateResult.data, { actorId: options?.actorId });
+      affectedNumbers += 1;
+      expiredEntries += 1;
+
+      if (updateResult.data.reservation_group_id) {
+        const expirePayment = await supabase
+          .from("app_raffle_payments")
+          .update({
+            status: "expired",
+            admin_note: "reserva_legacy_sin_expiracion",
+            reservation_expires_at: null,
+            updated_at: nowIso
+          })
+          .eq("reservation_group_id", updateResult.data.reservation_group_id)
+          .in("status", ["created", "pending", "failed"]);
+
+        if (expirePayment.error && !isMissingColumnError(expirePayment.error)) {
+          throw new Error(`No se pudo expirar pago legacy ${updateResult.data.reservation_group_id}: ${expirePayment.error.message}`);
+        }
+      }
     }
 
     return {
@@ -2453,10 +2534,24 @@ async function reserveRaffleNumbersForPaypalFallbackService(input: {
         .select("*")
         .single<AppRaffleEntryRow>();
 
-      if (isMissingColumnError(insert.error)) {
-        delete entryPayload.checkout_provider;
-        delete entryPayload.reservation_group_id;
-        delete entryPayload.reservation_expires_at;
+      let missingColumnRetries = 0;
+      while (insert.error && isMissingColumnError(insert.error)) {
+        const missingColumn = extractMissingColumnName(insert.error);
+        if (!missingColumn || !(missingColumn in entryPayload)) {
+          break;
+        }
+
+        if (missingColumn === "reservation_group_id" || missingColumn === "reservation_expires_at") {
+          throw new Error(
+            `Falta migración PayPal para rifas: columna crítica app_raffle_entries.${missingColumn}`
+          );
+        }
+
+        delete entryPayload[missingColumn];
+        missingColumnRetries += 1;
+        if (missingColumnRetries > 8) {
+          break;
+        }
 
         insert = await supabase
           .from("app_raffle_entries")
@@ -2498,18 +2593,26 @@ async function reserveRaffleNumbersForPaypalFallbackService(input: {
     };
 
     let paymentInsert = await supabase.from("app_raffle_payments").insert(paymentPayload);
-    let attemptedMissingColumnFallback = false;
+    let missingColumnRetries = 0;
     let attemptedStatusFallback = false;
 
     while (paymentInsert.error) {
-      if (!attemptedMissingColumnFallback && isMissingColumnError(paymentInsert.error)) {
-        attemptedMissingColumnFallback = true;
-        delete paymentPayload.reservation_group_id;
-        delete paymentPayload.entry_ids;
-        delete paymentPayload.selected_numbers;
-        delete paymentPayload.reservation_expires_at;
-        paymentInsert = await supabase.from("app_raffle_payments").insert(paymentPayload);
-        continue;
+      if (isMissingColumnError(paymentInsert.error)) {
+        const missingColumn = extractMissingColumnName(paymentInsert.error);
+        if (missingColumn && missingColumn in paymentPayload) {
+          if (["reservation_group_id", "paypal_order_id", "status"].includes(missingColumn)) {
+            throw new Error(
+              `Falta migración PayPal para rifas: columna crítica app_raffle_payments.${missingColumn}`
+            );
+          }
+
+          delete paymentPayload[missingColumn];
+          missingColumnRetries += 1;
+          if (missingColumnRetries <= 8) {
+            paymentInsert = await supabase.from("app_raffle_payments").insert(paymentPayload);
+            continue;
+          }
+        }
       }
 
       if (
@@ -2724,7 +2827,22 @@ export async function createRafflePayPalOrderService(input: { reservationGroupId
 
   const payment = await getRafflePaymentByReservationGroup(input.reservationGroupId);
   if (!payment) {
-    throw new Error("Reserva de pago no encontrada");
+    const danglingEntries = await listEntriesByReservationGroup(input.reservationGroupId);
+    const pendingDanglingEntries = danglingEntries.filter((entry) =>
+      ["pending_payment", "pending_review", "approved"].includes(entry.status)
+    );
+
+    if (pendingDanglingEntries.length > 0) {
+      for (const danglingEntry of pendingDanglingEntries) {
+        await updateRaffleEntryStatusService(danglingEntry.id, "cancelled", {
+          verificationNotes: "paypal_reservation_without_payment_record",
+          reason: "reserva_sin_pago",
+          skipNotification: true
+        });
+      }
+    }
+
+    throw new Error("Reserva de pago no encontrada. La selección fue liberada, vuelve a elegir tus números.");
   }
 
   if (["completed", "captured"].includes(payment.status)) {
