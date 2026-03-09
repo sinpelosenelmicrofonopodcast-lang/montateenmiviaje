@@ -1013,6 +1013,26 @@ function isMissingColumnError(error: { code?: string | null; message?: string | 
   );
 }
 
+function isMissingPayPalRaffleRpcError(error: { code?: string | null; message?: string | null } | null | undefined) {
+  const code = (error?.code ?? "").toUpperCase();
+  const message = (error?.message ?? "").toLowerCase();
+
+  if (code === "PGRST202") {
+    return true;
+  }
+
+  if (!message.includes("app_reserve_raffle_numbers_paypal")) {
+    return false;
+  }
+
+  return (
+    message.includes("does not exist")
+    || message.includes("could not find")
+    || message.includes("schema cache")
+    || message.includes("function")
+  );
+}
+
 function toPublicDisplayName(entry: RaffleEntry, mode: RaffleParticipantsMode) {
   const source = entry.publicDisplayName || entry.customerEmail;
   const [first = "Participante", second = ""] = source.split(" ");
@@ -2375,6 +2395,174 @@ async function listEntriesByReservationGroup(reservationGroupId: string) {
   return rows.data ?? [];
 }
 
+async function reserveRaffleNumbersForPaypalFallbackService(input: {
+  raffle: AppRaffleRow;
+  customer: AppCustomerRow;
+  chosenNumbers: number[];
+  fullName?: string;
+  phone?: string;
+  note?: string;
+  referredByCode?: string;
+  reservationMinutes: number;
+}): Promise<RafflePaypalReservationResult> {
+  const supabase = getSupabaseAdminClient();
+  const nowIso = new Date().toISOString();
+  const reservationGroupId = randomUUID();
+  const reservationExpiresAt = new Date(
+    Date.now() + Math.max(1, Math.min(input.reservationMinutes, 240)) * 60_000
+  ).toISOString();
+  const sortedNumbers = [...input.chosenNumbers].sort((a, b) => a - b);
+  const entryIds: string[] = [];
+  const createdEntries: AppRaffleEntryRow[] = [];
+  const createdNumbers: number[] = [];
+
+  try {
+    for (const numberValue of sortedNumbers) {
+      const entryPayload: Record<string, unknown> = {
+        raffle_id: input.raffle.id,
+        customer_id: input.customer.id,
+        customer_email: input.customer.email,
+        chosen_number: numberValue,
+        payment_reference: null,
+        note: input.note?.trim() || null,
+        status: "pending_payment",
+        source: "online",
+        public_display_name: input.fullName?.trim() || null,
+        consent_public_listing: false,
+        payment_method: "paypal",
+        phone: normalizePhone(input.phone) ?? null,
+        referred_by_code: input.referredByCode?.trim()?.toUpperCase() || null,
+        reservation_group_id: reservationGroupId,
+        reservation_expires_at: reservationExpiresAt,
+        checkout_provider: "paypal",
+        updated_at: nowIso
+      };
+
+      let insert = await supabase
+        .from("app_raffle_entries")
+        .insert(entryPayload)
+        .select("*")
+        .single<AppRaffleEntryRow>();
+
+      if (isMissingColumnError(insert.error)) {
+        delete entryPayload.checkout_provider;
+        delete entryPayload.reservation_group_id;
+        delete entryPayload.reservation_expires_at;
+
+        insert = await supabase
+          .from("app_raffle_entries")
+          .insert(entryPayload)
+          .select("*")
+          .single<AppRaffleEntryRow>();
+      }
+
+      if (insert.error || !insert.data) {
+        if (isUniqueViolation(insert.error)) {
+          throw new Error(`El número #${numberValue} ya no está disponible`);
+        }
+        throw new Error(insert.error?.message || `No se pudo reservar #${numberValue}`);
+      }
+
+      await syncNumberForEntry(insert.data, { paymentMethod: "paypal" });
+      entryIds.push(insert.data.id);
+      createdEntries.push(insert.data);
+      createdNumbers.push(numberValue);
+    }
+
+    const total = Number((Number(input.raffle.entry_fee) * createdNumbers.length).toFixed(2));
+    const paymentPayload: Record<string, unknown> = {
+      raffle_id: input.raffle.id,
+      entry_id: entryIds[0] ?? null,
+      customer_id: input.customer.id,
+      customer_email: input.customer.email,
+      amount: total,
+      currency: "USD",
+      payment_method: "paypal",
+      is_manual: false,
+      manually_verified: false,
+      status: "created",
+      reservation_group_id: reservationGroupId,
+      entry_ids: entryIds,
+      selected_numbers: createdNumbers,
+      reservation_expires_at: reservationExpiresAt,
+      updated_at: nowIso
+    };
+
+    let paymentInsert = await supabase.from("app_raffle_payments").insert(paymentPayload);
+    if (isMissingColumnError(paymentInsert.error)) {
+      delete paymentPayload.reservation_group_id;
+      delete paymentPayload.entry_ids;
+      delete paymentPayload.selected_numbers;
+      delete paymentPayload.reservation_expires_at;
+      paymentInsert = await supabase.from("app_raffle_payments").insert(paymentPayload);
+    }
+    if (paymentInsert.error) {
+      throw new Error(`No se pudo crear pago pendiente PayPal: ${paymentInsert.error.message}`);
+    }
+
+    if (createdEntries.length > 0) {
+      await sendEntryLifecycleNotifications({
+        eventType: "RAFFLE_ENTRY_CREATED",
+        raffle: input.raffle,
+        entries: createdEntries,
+        link: "/portal/pagos"
+      });
+    }
+
+    await logRaffleAdminAction({
+      raffleId: input.raffle.id,
+      action: "paypal_reservation_created_fallback",
+      entityType: "raffle_payment",
+      metadata: {
+        reservationGroupId,
+        selectedNumbers: createdNumbers,
+        amount: total,
+        customerEmail: input.customer.email
+      }
+    });
+
+    return {
+      raffleId: input.raffle.id,
+      reservationGroupId,
+      reservationExpiresAt,
+      selectedNumbers: createdNumbers,
+      entryIds,
+      amount: total,
+      currency: "USD"
+    };
+  } catch (error) {
+    if (entryIds.length > 0) {
+      await supabase
+        .from("app_raffle_entries")
+        .update({
+          status: "cancelled",
+          released_at: new Date().toISOString(),
+          released_reason: "rollback_reserva_paypal",
+          updated_at: new Date().toISOString()
+        })
+        .in("id", entryIds);
+
+      const rollbackRows = await supabase
+        .from("app_raffle_entries")
+        .select("*")
+        .in("id", entryIds)
+        .returns<AppRaffleEntryRow[]>();
+
+      if (!rollbackRows.error) {
+        for (const rollbackEntry of rollbackRows.data ?? []) {
+          try {
+            await syncNumberForEntry(rollbackEntry, { paymentMethod: "paypal" });
+          } catch {
+            // noop: preserving primary error
+          }
+        }
+      }
+    }
+
+    throw error;
+  }
+}
+
 export async function reserveRaffleNumbersForPaypalService(
   input: ReserveRaffleNumbersForPaypalInput
 ): Promise<RafflePaypalReservationResult> {
@@ -2440,8 +2628,20 @@ export async function reserveRaffleNumbersForPaypalService(
   });
 
   if (rpc.error) {
-    if ((rpc.error.code ?? "").toUpperCase() === "PGRST202") {
-      throw new Error("Falta migración de PayPal para rifas (RPC). Ejecuta la migración 202603092130_raffle_paypal_rpc_hotfix.sql.");
+    if (isMissingPayPalRaffleRpcError(rpc.error)) {
+      return reserveRaffleNumbersForPaypalFallbackService({
+        raffle,
+        customer: customer.data,
+        chosenNumbers,
+        fullName: input.fullName,
+        phone: input.phone,
+        note: input.note,
+        referredByCode: input.referredByCode,
+        reservationMinutes:
+          Number.isFinite(reservationMinutes) && reservationMinutes > 0
+            ? Math.min(Math.round(reservationMinutes), 240)
+            : 10
+      });
     }
     throw new Error(rpc.error.message || "No se pudieron reservar los números seleccionados");
   }
