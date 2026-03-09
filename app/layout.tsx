@@ -5,6 +5,7 @@ import { SiteHeader } from "@/components/site-header";
 import { WhatsAppFloat } from "@/components/whatsapp-float";
 import { OneSignalInit } from "@/components/custom/onesignal-init";
 import { OneSignalUserSync } from "@/components/custom/onesignal-user-sync";
+import { TawkChatInit } from "@/components/custom/tawk-chat-init";
 import { getSiteSettingService } from "@/lib/cms-service";
 
 function readString(value: unknown, fallback: string) {
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <OneSignalInit />
         <OneSignalUserSync />
+        <TawkChatInit />
         <SiteHeader />
         {children}
         <SiteFooter />
