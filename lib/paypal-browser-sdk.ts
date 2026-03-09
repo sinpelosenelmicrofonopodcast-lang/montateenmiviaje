@@ -1,20 +1,70 @@
 let sdkLoadPromise: Promise<void> | null = null;
+let clientIdLoadPromise: Promise<string> | null = null;
 
 const DEFAULT_BUYER_COUNTRY = "US";
 const ENABLE_FUNDING = "venmo,paylater,card";
 
-export function loadPaypalBrowserSdk(clientId: string) {
+declare global {
+  interface Window {
+    __MONTATE_PAYPAL_CLIENT_ID__?: string;
+  }
+}
+
+async function resolvePayPalClientId(explicitClientId?: string) {
+  const direct = explicitClientId?.trim();
+  if (direct) {
+    return direct;
+  }
+
+  const fromBundle = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID?.trim();
+  if (fromBundle) {
+    return fromBundle;
+  }
+
+  if (typeof window !== "undefined" && window.__MONTATE_PAYPAL_CLIENT_ID__) {
+    return window.__MONTATE_PAYPAL_CLIENT_ID__;
+  }
+
+  if (!clientIdLoadPromise) {
+    clientIdLoadPromise = (async () => {
+      const response = await fetch("/api/paypal/client-config", {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        cache: "no-store"
+      });
+      const payload = (await response.json()) as { clientId?: string; message?: string };
+
+      if (!response.ok || !payload.clientId) {
+        throw new Error(payload.message ?? "PayPal no está configurado en este momento.");
+      }
+
+      if (typeof window !== "undefined") {
+        window.__MONTATE_PAYPAL_CLIENT_ID__ = payload.clientId;
+      }
+      return payload.clientId;
+    })().catch((error) => {
+      clientIdLoadPromise = null;
+      throw error;
+    });
+  }
+
+  return clientIdLoadPromise;
+}
+
+export async function loadPaypalBrowserSdk(clientId?: string) {
   if (typeof window === "undefined") {
-    return Promise.resolve();
+    return;
   }
 
   if (window.paypal) {
-    return Promise.resolve();
+    return;
   }
 
   if (sdkLoadPromise) {
     return sdkLoadPromise;
   }
+
+  const resolvedClientId = await resolvePayPalClientId(clientId);
 
   sdkLoadPromise = new Promise<void>((resolve, reject) => {
     const existing = document.querySelector<HTMLScriptElement>("script[data-paypal-sdk='true']");
@@ -35,7 +85,7 @@ export function loadPaypalBrowserSdk(clientId: string) {
     }
 
     const params = new URLSearchParams({
-      "client-id": clientId,
+      "client-id": resolvedClientId,
       currency: "USD",
       components: "buttons",
       intent: "capture",

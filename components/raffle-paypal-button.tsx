@@ -39,12 +39,7 @@ export function RafflePayPalButton({
 
     async function setup() {
       try {
-        const clientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
-        if (!clientId) {
-          throw new Error("NEXT_PUBLIC_PAYPAL_CLIENT_ID no está configurado");
-        }
-
-        await loadPaypalBrowserSdk(clientId);
+        await loadPaypalBrowserSdk();
         if (!mounted || !window.paypal) {
           return;
         }

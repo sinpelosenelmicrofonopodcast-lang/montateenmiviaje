@@ -223,10 +223,6 @@ export function RaffleEntryForm({
 
     try {
       if (isAutomaticPayPalFlow) {
-        if (!process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID) {
-          throw new Error("PayPal no está configurado en este momento. Intenta nuevamente en unos minutos.");
-        }
-
         const reserveResponse = await fetch("/api/raffles/reserve-numbers", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
