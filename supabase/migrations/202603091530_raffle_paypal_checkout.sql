@@ -1,7 +1,7 @@
 -- PayPal Business checkout support for raffles (additive, backward-compatible)
 
 -- 1) Extend raffle entries for grouped reservations
-DO $$
+DO $outer$
 BEGIN
   IF to_regclass('public.app_raffle_entries') IS NOT NULL THEN
     ALTER TABLE public.app_raffle_entries
@@ -93,7 +93,7 @@ BEGIN
   LANGUAGE plpgsql
   SECURITY DEFINER
   SET search_path = public
-  AS $$
+  AS $fn$
   DECLARE
     v_raffle public.app_raffles%ROWTYPE;
     v_group uuid := gen_random_uuid();
@@ -283,7 +283,7 @@ BEGIN
     RETURN QUERY
     SELECT v_group, v_expires, v_numbers, v_entry_ids, v_total;
   END;
-  $$;
-END $$;
+  $fn$;
+END $outer$;
 
 NOTIFY pgrst, 'reload schema';
