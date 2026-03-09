@@ -1,28 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { loadPaypalBrowserSdk } from "@/lib/paypal-browser-sdk";
 
 interface PaypalButtonProps {
   bookingId: string;
   amount: number;
   onPaid: (orderId: string) => void;
-}
-
-function loadPaypalSdk(clientId: string) {
-  const existing = document.querySelector<HTMLScriptElement>("script[data-paypal-sdk='true']");
-  if (existing) {
-    return Promise.resolve();
-  }
-
-  return new Promise<void>((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&intent=capture`;
-    script.async = true;
-    script.dataset.paypalSdk = "true";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("No se pudo cargar PayPal SDK"));
-    document.body.appendChild(script);
-  });
 }
 
 export function PaypalButton({ bookingId, amount, onPaid }: PaypalButtonProps) {
@@ -40,7 +24,7 @@ export function PaypalButton({ bookingId, amount, onPaid }: PaypalButtonProps) {
           throw new Error("NEXT_PUBLIC_PAYPAL_CLIENT_ID no está configurado");
         }
 
-        await loadPaypalSdk(clientId);
+        await loadPaypalBrowserSdk(clientId);
         if (!mounted || !window.paypal) {
           return;
         }
@@ -61,12 +45,11 @@ export function PaypalButton({ bookingId, amount, onPaid }: PaypalButtonProps) {
                 body: JSON.stringify({ bookingId, amount })
               });
 
-              if (!response.ok) {
-                const payload = (await response.json()) as { message?: string };
+              const payload = (await response.json()) as { message?: string; orderId?: string };
+              if (!response.ok || !payload.orderId) {
                 throw new Error(payload.message ?? "No se pudo crear la orden de PayPal");
               }
 
-              const payload = (await response.json()) as { orderId: string };
               return payload.orderId;
             },
             onApprove: async (data) => {

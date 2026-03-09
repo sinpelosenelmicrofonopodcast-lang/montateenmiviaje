@@ -45,6 +45,7 @@ Copia `.env.example` a `.env.local` y completa:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `NEXT_PUBLIC_PAYPAL_CLIENT_ID`
+- `NEXT_PUBLIC_PAYPAL_BUYER_COUNTRY` (opcional, default `US`)
 - `PAYPAL_CLIENT_SECRET`
 - `PAYPAL_ENV` (`sandbox` o `live`)
 

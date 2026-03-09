@@ -1,7 +1,7 @@
 -- PayPal Business checkout support for raffles (additive, backward-compatible)
 
 -- 1) Extend raffle entries for grouped reservations
-DO $outer$
+DO $$
 BEGIN
   IF to_regclass('public.app_raffle_entries') IS NOT NULL THEN
     ALTER TABLE public.app_raffle_entries
@@ -284,6 +284,6 @@ BEGIN
     SELECT v_group, v_expires, v_numbers, v_entry_ids, v_total;
   END;
   $fn$;
-END $outer$;
+END $$;
 
 NOTIFY pgrst, 'reload schema';

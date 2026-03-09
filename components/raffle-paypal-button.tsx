@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { loadPaypalBrowserSdk } from "@/lib/paypal-browser-sdk";
 
 interface RafflePayPalButtonProps {
   reservationGroupId: string;
@@ -12,23 +13,6 @@ interface RafflePayPalButtonProps {
     idempotent?: boolean;
   }) => void;
   onCancelled?: () => void;
-}
-
-function loadPaypalSdk(clientId: string) {
-  const existing = document.querySelector<HTMLScriptElement>("script[data-paypal-sdk='true']");
-  if (existing) {
-    return Promise.resolve();
-  }
-
-  return new Promise<void>((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&intent=capture`;
-    script.async = true;
-    script.dataset.paypalSdk = "true";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("No se pudo cargar PayPal SDK"));
-    document.body.appendChild(script);
-  });
 }
 
 export function RafflePayPalButton({ reservationGroupId, disabled, onPaid, onCancelled }: RafflePayPalButtonProps) {
@@ -53,7 +37,7 @@ export function RafflePayPalButton({ reservationGroupId, disabled, onPaid, onCan
           throw new Error("NEXT_PUBLIC_PAYPAL_CLIENT_ID no está configurado");
         }
 
-        await loadPaypalSdk(clientId);
+        await loadPaypalBrowserSdk(clientId);
         if (!mounted || !window.paypal) {
           return;
         }
