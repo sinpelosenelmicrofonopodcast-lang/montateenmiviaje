@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { hasSupabaseConfig, getSupabaseAdminClient } from "@/lib/supabase-admin";
 import { dispatchNotificationEventSafe } from "@/lib/notifications/orchestrator";
+import { createPayPalOrder, capturePayPalOrder, getPayPalOrder } from "@/lib/paypal";
 import {
   Customer,
   RaffleFaqItem,
@@ -124,6 +125,32 @@ export interface RegisterOfflineRaffleSaleInput {
   paymentReference?: string;
   note?: string;
   markAsConfirmed?: boolean;
+  actorId?: string;
+}
+
+export interface ReserveRaffleNumbersForPaypalInput {
+  raffleId: string;
+  customerEmail: string;
+  chosenNumbers: number[];
+  fullName?: string;
+  phone?: string;
+  note?: string;
+  referredByCode?: string;
+}
+
+export interface RafflePaypalReservationResult {
+  raffleId: string;
+  reservationGroupId: string;
+  reservationExpiresAt: string;
+  selectedNumbers: number[];
+  entryIds: string[];
+  amount: number;
+  currency: "USD";
+}
+
+export interface CaptureRafflePaypalOrderInput {
+  orderId: string;
+  reservationGroupId?: string;
   actorId?: string;
 }
 
@@ -292,6 +319,7 @@ interface AppRaffleRow {
 interface AppRaffleEntryRow {
   id: string;
   raffle_id: string;
+  reservation_group_id?: string | null;
   customer_id: string;
   customer_email: string;
   chosen_number: number;
@@ -316,6 +344,7 @@ interface AppRaffleEntryRow {
   released_reason?: string | null;
   released_by?: string | null;
   expiry_reminder_sent_at?: string | null;
+  checkout_provider?: string | null;
   updated_at?: string | null;
   created_at: string;
 }
@@ -344,17 +373,38 @@ interface AppRafflePaymentRow {
   id: string;
   raffle_id: string;
   entry_id: string | null;
+  reservation_group_id?: string | null;
+  entry_ids?: unknown;
+  selected_numbers?: unknown;
   customer_id: string | null;
   customer_email: string | null;
   amount: number;
   currency: string;
   payment_method: RaffleManualPaymentMethod;
+  paypal_order_id?: string | null;
+  paypal_capture_id?: string | null;
+  paypal_payer_id?: string | null;
+  payer_email?: string | null;
   payment_reference: string | null;
   screenshot_url: string | null;
+  reservation_expires_at?: string | null;
+  paid_at?: string | null;
   is_manual: boolean;
   manually_verified: boolean;
-  status: "pending" | "approved" | "rejected" | "cancelled";
+  status:
+    | "created"
+    | "pending"
+    | "approved"
+    | "captured"
+    | "completed"
+    | "failed"
+    | "rejected"
+    | "expired"
+    | "cancelled"
+    | "refunded";
   admin_note: string | null;
+  raw_order_response?: Record<string, unknown> | null;
+  raw_capture_response?: Record<string, unknown> | null;
   verified_by: string | null;
   verified_at: string | null;
   created_by: string | null;
@@ -481,6 +531,7 @@ function mapRaffleEntry(row: AppRaffleEntryRow): RaffleEntry {
   return {
     id: row.id,
     raffleId: row.raffle_id,
+    reservationGroupId: row.reservation_group_id ?? undefined,
     customerId: row.customer_id,
     customerEmail: row.customer_email,
     chosenNumber: row.chosen_number,
@@ -505,6 +556,7 @@ function mapRaffleEntry(row: AppRaffleEntryRow): RaffleEntry {
     releasedReason: row.released_reason ?? undefined,
     releasedBy: row.released_by ?? undefined,
     expiryReminderSentAt: row.expiry_reminder_sent_at ?? undefined,
+    checkoutProvider: row.checkout_provider ?? undefined,
     updatedAt: row.updated_at ?? undefined,
     createdAt: row.created_at
   };
@@ -533,17 +585,28 @@ function mapRaffleNumber(row: AppRaffleNumberRow): RaffleNumber {
 }
 
 function mapRafflePayment(row: AppRafflePaymentRow): RafflePayment {
+  const entryIds = parseUuidArray(row.entry_ids);
+  const selectedNumbers = parseIntegerArray(row.selected_numbers);
   return {
     id: row.id,
     raffleId: row.raffle_id,
+    reservationGroupId: row.reservation_group_id ?? undefined,
     entryId: row.entry_id ?? undefined,
+    entryIds: entryIds.length > 0 ? entryIds : undefined,
     customerId: row.customer_id ?? undefined,
     customerEmail: row.customer_email ?? undefined,
     amount: Number(row.amount),
     currency: row.currency,
     paymentMethod: row.payment_method,
+    paypalOrderId: row.paypal_order_id ?? undefined,
+    paypalCaptureId: row.paypal_capture_id ?? undefined,
+    paypalPayerId: row.paypal_payer_id ?? undefined,
+    payerEmail: row.payer_email ?? undefined,
     paymentReference: row.payment_reference ?? undefined,
     screenshotUrl: row.screenshot_url ?? undefined,
+    reservationExpiresAt: row.reservation_expires_at ?? undefined,
+    paidAt: row.paid_at ?? undefined,
+    selectedNumbers: selectedNumbers.length > 0 ? selectedNumbers : undefined,
     isManual: row.is_manual,
     manuallyVerified: row.manually_verified,
     status: row.status,
@@ -687,6 +750,20 @@ function normalizePaymentHref(value: string) {
 
 function asNonEmptyString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : "";
+}
+
+function parseUuidArray(value: unknown) {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean);
+}
+
+function parseIntegerArray(value: unknown) {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .map((item) => Number(item))
+    .filter((item) => Number.isInteger(item) && item > 0);
 }
 
 function sanitizeStringList(value: unknown) {
@@ -1219,6 +1296,36 @@ async function listRaffleEntriesRows(raffleId?: string) {
   return response.data ?? [];
 }
 
+async function getRafflePaymentByReservationGroup(reservationGroupId: string) {
+  const supabase = getSupabaseAdminClient();
+  const result = await supabase
+    .from("app_raffle_payments")
+    .select("*")
+    .eq("reservation_group_id", reservationGroupId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<AppRafflePaymentRow>();
+
+  if (result.error) {
+    throw new Error(`No se pudo cargar pago de reserva: ${result.error.message}`);
+  }
+  return result.data ?? null;
+}
+
+async function getRafflePaymentByPayPalOrder(orderId: string) {
+  const supabase = getSupabaseAdminClient();
+  const result = await supabase
+    .from("app_raffle_payments")
+    .select("*")
+    .eq("paypal_order_id", orderId)
+    .maybeSingle<AppRafflePaymentRow>();
+
+  if (result.error) {
+    throw new Error(`No se pudo cargar pago PayPal: ${result.error.message}`);
+  }
+  return result.data ?? null;
+}
+
 async function processReservationExpirationsSupabase(options?: {
   force?: boolean;
   actorId?: string;
@@ -1335,6 +1442,23 @@ async function processReservationExpirationsSupabase(options?: {
       await syncNumberForEntry(updateResult.data, { actorId: options?.actorId });
       affectedNumbers += 1;
       expiredEntries += 1;
+
+      if (updateResult.data.reservation_group_id) {
+        const expirePayment = await supabase
+          .from("app_raffle_payments")
+          .update({
+            status: "expired",
+            admin_note: "reserva_expirada",
+            reservation_expires_at: null,
+            updated_at: nowIso
+          })
+          .eq("reservation_group_id", updateResult.data.reservation_group_id)
+          .in("status", ["created", "pending"]);
+
+        if (expirePayment.error && !isMissingColumnError(expirePayment.error)) {
+          throw new Error(`No se pudo expirar pago de reserva ${updateResult.data.reservation_group_id}: ${expirePayment.error.message}`);
+        }
+      }
 
       const raffle = await getRaffleRowOrThrow(updateResult.data.raffle_id);
       await sendEntryLifecycleNotifications({
@@ -2064,6 +2188,9 @@ export async function enterRaffleService(
   if (!raffle.is_free && configuredMethods.length > 0 && !selectedMethodConfig) {
     throw new Error("Método de pago inválido para este sorteo");
   }
+  if (!raffle.is_free && selectedMethodConfig?.provider === "paypal" && selectedMethodConfig.isAutomatic) {
+    throw new Error("Este sorteo requiere checkout PayPal automático. Usa el botón de PayPal para confirmar.");
+  }
 
   const normalizedPaymentReference = paymentReference?.trim() || undefined;
   const normalizedScreenshotUrl = options?.paymentScreenshotUrl?.trim() || undefined;
@@ -2231,6 +2358,487 @@ export async function enterRaffleService(
   }
 
   return createdEntries.map(mapRaffleEntry);
+}
+
+async function listEntriesByReservationGroup(reservationGroupId: string) {
+  const supabase = getSupabaseAdminClient();
+  const rows = await supabase
+    .from("app_raffle_entries")
+    .select("*")
+    .eq("reservation_group_id", reservationGroupId)
+    .order("chosen_number", { ascending: true })
+    .returns<AppRaffleEntryRow[]>();
+
+  if (rows.error) {
+    throw new Error(`No se pudieron cargar participaciones de la reserva: ${rows.error.message}`);
+  }
+  return rows.data ?? [];
+}
+
+export async function reserveRaffleNumbersForPaypalService(
+  input: ReserveRaffleNumbersForPaypalInput
+): Promise<RafflePaypalReservationResult> {
+  ensureConfigured();
+  await runRaffleRuntimeMaintenance();
+
+  const raffle = await getRaffleRowOrThrow(input.raffleId);
+  if (raffle.status !== "published" || raffle.drawn_at) {
+    throw new Error("Este sorteo no está aceptando participaciones");
+  }
+  if (raffle.is_free) {
+    throw new Error("Este sorteo no requiere pago PayPal");
+  }
+
+  const chosenNumbers = input.chosenNumbers
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value))
+    .filter((value, index, list) => list.indexOf(value) === index);
+
+  if (chosenNumbers.length === 0) {
+    throw new Error("Selecciona al menos un número disponible");
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const normalizedEmail = normalizeEmail(input.customerEmail);
+  const customer = await supabase
+    .from("app_customers")
+    .select("*")
+    .eq("email", normalizedEmail)
+    .eq("is_registered", true)
+    .maybeSingle<AppCustomerRow>();
+
+  if (customer.error) {
+    throw new Error(`Error validando usuario: ${customer.error.message}`);
+  }
+  if (!customer.data) {
+    throw new Error("Debes estar registrado para participar");
+  }
+
+  const raffleModel = mapRaffle(raffle);
+  const paypalMethod = (raffleModel.paymentMethods ?? [])
+    .filter((method) => method.enabled)
+    .find((method) => method.provider === "paypal");
+  const reservationMinutes = Number(
+    (paypalMethod?.config as Record<string, unknown> | undefined)?.reservationMinutes
+      ?? (paypalMethod?.config as Record<string, unknown> | undefined)?.holdMinutes
+      ?? 10
+  );
+
+  const rpc = await supabase.rpc("app_reserve_raffle_numbers_paypal", {
+    p_raffle_id: raffle.id,
+    p_customer_id: customer.data.id,
+    p_customer_email: customer.data.email,
+    p_numbers: chosenNumbers,
+    p_public_display_name: input.fullName?.trim() || null,
+    p_phone: normalizePhone(input.phone) ?? null,
+    p_note: input.note?.trim() || null,
+    p_referred_by_code: input.referredByCode?.trim() || null,
+    p_reservation_minutes:
+      Number.isFinite(reservationMinutes) && reservationMinutes > 0
+        ? Math.min(Math.round(reservationMinutes), 240)
+        : 10
+  });
+
+  if (rpc.error) {
+    if ((rpc.error.code ?? "").toUpperCase() === "PGRST202") {
+      throw new Error("Falta migración de PayPal para rifas. Ejecuta las migraciones pendientes.");
+    }
+    throw new Error(rpc.error.message || "No se pudieron reservar los números seleccionados");
+  }
+
+  const row = Array.isArray(rpc.data) ? rpc.data[0] : null;
+  if (!row?.reservation_group_id || !row?.reservation_expires_at) {
+    throw new Error("No se pudo crear la reserva temporal de PayPal");
+  }
+
+  const reservationGroupId = String(row.reservation_group_id);
+  const entryIds = parseUuidArray(row.entry_ids);
+  const selectedNumbers = parseIntegerArray(row.selected_numbers);
+  const amount = Number(row.total_amount ?? raffle.entry_fee * selectedNumbers.length);
+  const entries = await listEntriesByReservationGroup(reservationGroupId);
+
+  if (entries.length > 0) {
+    await sendEntryLifecycleNotifications({
+      eventType: "RAFFLE_ENTRY_CREATED",
+      raffle,
+      entries,
+      link: "/portal/pagos"
+    });
+  }
+
+  await logRaffleAdminAction({
+    raffleId: raffle.id,
+    action: "paypal_reservation_created",
+    entityType: "raffle_payment",
+    metadata: {
+      reservationGroupId,
+      selectedNumbers,
+      amount,
+      customerEmail: customer.data.email
+    }
+  });
+
+  return {
+    raffleId: raffle.id,
+    reservationGroupId,
+    reservationExpiresAt: String(row.reservation_expires_at),
+    selectedNumbers,
+    entryIds,
+    amount,
+    currency: "USD"
+  };
+}
+
+export async function createRafflePayPalOrderService(input: { reservationGroupId: string }) {
+  ensureConfigured();
+  await runRaffleRuntimeMaintenance();
+
+  const payment = await getRafflePaymentByReservationGroup(input.reservationGroupId);
+  if (!payment) {
+    throw new Error("Reserva de pago no encontrada");
+  }
+
+  if (["completed", "captured"].includes(payment.status)) {
+    return { orderId: payment.paypal_order_id, alreadyCreated: true };
+  }
+
+  const expiresAt = payment.reservation_expires_at ? new Date(payment.reservation_expires_at).getTime() : null;
+  if (expiresAt && Date.now() >= expiresAt) {
+    await releaseRaffleReservationGroupService({
+      reservationGroupId: input.reservationGroupId,
+      reason: "expired",
+      skipNotifications: false
+    });
+    throw new Error("La reserva expiró. Vuelve a seleccionar tus números.");
+  }
+
+  if (payment.paypal_order_id && ["created", "pending"].includes(payment.status)) {
+    return { orderId: payment.paypal_order_id, alreadyCreated: true };
+  }
+
+  const raffle = await getRaffleRowOrThrow(payment.raffle_id);
+  const order = await createPayPalOrder({
+    amount: Number(payment.amount),
+    currency: payment.currency ?? "USD",
+    customId: `raffle:${payment.raffle_id}:reservation:${input.reservationGroupId}`,
+    referenceId: payment.id,
+    description: `Rifa ${raffle.title} - ${input.reservationGroupId}`
+  });
+
+  const supabase = getSupabaseAdminClient();
+  const update = await supabase
+    .from("app_raffle_payments")
+    .update({
+      status: "pending",
+      paypal_order_id: order.id,
+      raw_order_response: order as unknown as Record<string, unknown>,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", payment.id)
+    .in("status", ["created", "pending", "failed"])
+    .select("id,paypal_order_id")
+    .maybeSingle<{ id: string; paypal_order_id: string | null }>();
+
+  if (update.error) {
+    throw new Error(`No se pudo guardar orden PayPal: ${update.error.message}`);
+  }
+
+  const orderId = update.data?.paypal_order_id ?? order.id;
+  return { orderId, alreadyCreated: false };
+}
+
+export async function captureRafflePayPalOrderService(
+  input: CaptureRafflePaypalOrderInput
+): Promise<{ payment: RafflePayment; entries: RaffleEntry[]; assignedNumbers: number[]; idempotent: boolean }> {
+  ensureConfigured();
+  await runRaffleRuntimeMaintenance({ force: true });
+
+  const paymentByOrder = await getRafflePaymentByPayPalOrder(input.orderId);
+  const paymentByGroup = input.reservationGroupId
+    ? await getRafflePaymentByReservationGroup(input.reservationGroupId)
+    : null;
+  const payment = paymentByOrder ?? paymentByGroup;
+
+  if (!payment) {
+    throw new Error("No se encontró una reserva asociada a esa orden");
+  }
+
+  if (payment.paypal_order_id && payment.paypal_order_id !== input.orderId) {
+    throw new Error("La orden de PayPal no coincide con la reserva");
+  }
+
+  if (["completed", "captured"].includes(payment.status)) {
+    const existingEntries = payment.reservation_group_id
+      ? (await listEntriesByReservationGroup(payment.reservation_group_id)).map(mapRaffleEntry)
+      : [];
+    return {
+      payment: mapRafflePayment(payment),
+      entries: existingEntries,
+      assignedNumbers: existingEntries.map((entry) => entry.chosenNumber),
+      idempotent: true
+    };
+  }
+
+  const expectedAmount = Number(payment.amount);
+  const expectedCurrency = (payment.currency || "USD").toUpperCase();
+  const orderDetails = await getPayPalOrder(input.orderId);
+  const unit = orderDetails.purchase_units?.[0];
+  const orderAmount = Number(unit?.amount?.value ?? 0);
+  const orderCurrency = (unit?.amount?.currencyCode ?? unit?.amount?.currency_code ?? "USD").toUpperCase();
+  if (Math.abs(orderAmount - expectedAmount) > 0.01 || orderCurrency !== expectedCurrency) {
+    throw new Error("La orden PayPal no coincide con el monto/currency esperado");
+  }
+
+  let capture: Awaited<ReturnType<typeof capturePayPalOrder>>;
+  try {
+    capture = await capturePayPalOrder(input.orderId);
+  } catch (captureError) {
+    const message = captureError instanceof Error ? captureError.message : String(captureError);
+    const alreadyCaptured =
+      message.includes("ORDER_ALREADY_CAPTURED")
+      || message.includes("already been captured")
+      || message.includes("ORDER_COMPLETED");
+    if (!alreadyCaptured) {
+      throw captureError;
+    }
+    capture = await getPayPalOrder(input.orderId);
+  }
+  const capturedUnit = capture.purchase_units?.[0];
+  const captureRecord = capturedUnit?.payments?.captures?.[0];
+  const captureStatus = (captureRecord?.status ?? capture.status ?? "").toUpperCase();
+  if (captureStatus !== "COMPLETED") {
+    const supabase = getSupabaseAdminClient();
+    await supabase
+      .from("app_raffle_payments")
+      .update({
+        status: "failed",
+        paypal_order_id: input.orderId,
+        raw_order_response: orderDetails as unknown as Record<string, unknown>,
+        raw_capture_response: capture as unknown as Record<string, unknown>,
+        admin_note: `paypal_capture_status:${captureStatus || "unknown"}`,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", payment.id);
+    throw new Error("PayPal no confirmó la captura. Intenta de nuevo.");
+  }
+
+  const captureAmount = Number(captureRecord?.amount?.value ?? orderAmount);
+  const captureCurrency = (captureRecord?.amount?.currencyCode ?? captureRecord?.amount?.currency_code ?? orderCurrency).toUpperCase();
+  if (Math.abs(captureAmount - expectedAmount) > 0.01 || captureCurrency !== expectedCurrency) {
+    throw new Error("La captura de PayPal no coincide con el monto/currency esperado");
+  }
+
+  const reservationGroupId = payment.reservation_group_id;
+  if (!reservationGroupId) {
+    throw new Error("Reserva inválida: falta reservation_group_id");
+  }
+
+  const entries = await listEntriesByReservationGroup(reservationGroupId);
+  const pendingEntries = entries.filter((entry) => ["pending_payment", "pending_review", "approved"].includes(entry.status));
+  if (!pendingEntries.length) {
+    const refreshed = await getRafflePaymentByReservationGroup(reservationGroupId);
+    if (refreshed && ["completed", "captured"].includes(refreshed.status)) {
+      const mappedEntries = entries.map(mapRaffleEntry);
+      return {
+        payment: mapRafflePayment(refreshed),
+        entries: mappedEntries,
+        assignedNumbers: mappedEntries.map((entry) => entry.chosenNumber),
+        idempotent: true
+      };
+    }
+    throw new Error("La reserva ya no está activa para captura");
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const paymentUpdate = await supabase
+    .from("app_raffle_payments")
+    .update({
+      status: "completed",
+      paypal_order_id: input.orderId,
+      paypal_capture_id: captureRecord?.id ?? null,
+      paypal_payer_id: capture.payer?.payer_id ?? null,
+      payer_email: capture.payer?.email_address ?? null,
+      raw_order_response: orderDetails as unknown as Record<string, unknown>,
+      raw_capture_response: capture as unknown as Record<string, unknown>,
+      manually_verified: true,
+      verified_at: new Date().toISOString(),
+      paid_at: new Date().toISOString(),
+      reservation_expires_at: null,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", payment.id)
+    .in("status", ["created", "pending", "failed"])
+    .select("*")
+    .maybeSingle<AppRafflePaymentRow>();
+
+  if (paymentUpdate.error) {
+    throw new Error(`No se pudo confirmar pago PayPal: ${paymentUpdate.error.message}`);
+  }
+
+  const alreadyProcessed = !paymentUpdate.data;
+  const assignedEntries: AppRaffleEntryRow[] = [];
+
+  if (!alreadyProcessed) {
+    for (const entry of pendingEntries) {
+      const updated = await updateRaffleEntryStatusService(entry.id, "assigned", {
+        actorId: input.actorId,
+        verificationNotes: "paypal_capture_confirmed",
+        skipNotification: true
+      });
+      if (updated) {
+        const fresh = await getEntryById(updated.id);
+        if (fresh) {
+          assignedEntries.push(fresh);
+        }
+      }
+    }
+
+    if (assignedEntries.length > 0) {
+      const raffle = await getRaffleRowOrThrow(payment.raffle_id);
+      await sendEntryLifecycleNotifications({
+        eventType: "RAFFLE_ENTRY_ASSIGNED",
+        raffle,
+        entries: assignedEntries,
+        actorId: input.actorId,
+        link: "/portal"
+      });
+    }
+
+    await dispatchNotificationEventSafe({
+      eventType: "PAYMENT_CONFIRMED",
+      entityType: "raffle_payment",
+      entityId: payment.id,
+      actorUserId: input.actorId,
+      recipients: {
+        scope: "emails",
+        emails: [payment.customer_email ?? ""].filter(Boolean)
+      },
+      channels: ["inbox", "push", "email"],
+      variables: {
+        amount: Number(payment.amount),
+        link: "/portal/pagos"
+      },
+      link: "/portal/pagos",
+      metadata: {
+        source: "raffle_paypal_capture",
+        raffleId: payment.raffle_id
+      },
+      dedupeKey: `raffle-paypal-payment-confirmed:${payment.id}:${captureRecord?.id ?? input.orderId}`
+    });
+
+    await logRaffleAdminAction({
+      raffleId: payment.raffle_id,
+      actorId: input.actorId,
+      action: "paypal_payment_captured",
+      entityType: "raffle_payment",
+      entityId: payment.id,
+      metadata: {
+        reservationGroupId,
+        orderId: input.orderId,
+        captureId: captureRecord?.id ?? null,
+        assignedNumbers: assignedEntries.map((entry) => entry.chosen_number)
+      }
+    });
+  }
+
+  const refreshedPayment = (await getRafflePaymentByReservationGroup(reservationGroupId)) ?? payment;
+  const refreshedEntries = await listEntriesByReservationGroup(reservationGroupId);
+  const mappedEntries = refreshedEntries.map(mapRaffleEntry);
+
+  return {
+    payment: mapRafflePayment(refreshedPayment),
+    entries: mappedEntries,
+    assignedNumbers: mappedEntries
+      .filter((entry) => isAssignedEntryStatus(entry.status))
+      .map((entry) => entry.chosenNumber),
+    idempotent: alreadyProcessed
+  };
+}
+
+export async function releaseRaffleReservationGroupService(input: {
+  reservationGroupId: string;
+  reason: "cancelled" | "expired" | "failed";
+  actorId?: string;
+  skipNotifications?: boolean;
+}) {
+  ensureConfigured();
+  const payment = await getRafflePaymentByReservationGroup(input.reservationGroupId);
+  if (!payment) {
+    return { releasedNumbers: [] as number[], alreadyFinalized: true };
+  }
+  if (["completed", "captured", "refunded"].includes(payment.status)) {
+    return { releasedNumbers: [] as number[], alreadyFinalized: true };
+  }
+
+  const entries = await listEntriesByReservationGroup(input.reservationGroupId);
+  const activeEntries = entries.filter((entry) => ["pending_payment", "pending_review", "approved"].includes(entry.status));
+  const nextStatus: RaffleEntryStatus = input.reason === "expired" ? "expired" : "cancelled";
+  const reason = input.reason === "expired" ? "tiempo_expirado" : "pago_cancelado";
+  const released: RaffleEntry[] = [];
+
+  for (const entry of activeEntries) {
+    const updated = await updateRaffleEntryStatusService(entry.id, nextStatus, {
+      actorId: input.actorId,
+      reason,
+      verificationNotes: `paypal_${input.reason}`,
+      skipNotification: true
+    });
+    if (updated) {
+      released.push(updated);
+    }
+  }
+
+  const supabase = getSupabaseAdminClient();
+  const paymentStatus = input.reason === "expired" ? "expired" : input.reason === "failed" ? "failed" : "cancelled";
+  const paymentUpdate = await supabase
+    .from("app_raffle_payments")
+    .update({
+      status: paymentStatus,
+      reservation_expires_at: null,
+      admin_note: `paypal_${input.reason}`,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", payment.id)
+    .in("status", ["created", "pending", "failed", "expired", "cancelled"])
+    .select("*")
+    .maybeSingle<AppRafflePaymentRow>();
+
+  if (paymentUpdate.error) {
+    throw new Error(`No se pudo liberar reserva PayPal: ${paymentUpdate.error.message}`);
+  }
+
+  if (released.length > 0 && !input.skipNotifications) {
+    const raffle = await getRaffleRowOrThrow(payment.raffle_id);
+    const refreshedRows = await Promise.all(released.map((entry) => getEntryById(entry.id)));
+    const rows = refreshedRows.filter((row): row is AppRaffleEntryRow => Boolean(row));
+    if (rows.length > 0) {
+      await sendEntryLifecycleNotifications({
+        eventType: input.reason === "expired" ? "RAFFLE_ENTRY_EXPIRED" : "RAFFLE_ENTRY_REJECTED",
+        raffle,
+        entries: rows,
+        actorId: input.actorId,
+        reason
+      });
+    }
+  }
+
+  await logRaffleAdminAction({
+    raffleId: payment.raffle_id,
+    actorId: input.actorId,
+    action: "paypal_reservation_released",
+    entityType: "raffle_payment",
+    entityId: payment.id,
+    metadata: {
+      reservationGroupId: input.reservationGroupId,
+      reason: input.reason,
+      releasedNumbers: released.map((entry) => entry.chosenNumber)
+    }
+  });
+
+  return {
+    releasedNumbers: released.map((entry) => entry.chosenNumber),
+    alreadyFinalized: false
+  };
 }
 
 export async function updateRaffleEntryStatusService(

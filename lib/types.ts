@@ -518,6 +518,7 @@ export interface Raffle {
 export interface RaffleEntry {
   id: string;
   raffleId: string;
+  reservationGroupId?: string;
   customerId: string;
   customerEmail: string;
   chosenNumber: number;
@@ -542,6 +543,7 @@ export interface RaffleEntry {
   releasedReason?: string;
   releasedBy?: string;
   expiryReminderSentAt?: string;
+  checkoutProvider?: string;
   updatedAt?: string;
   createdAt: string;
 }
@@ -569,17 +571,36 @@ export interface RaffleNumber {
 export interface RafflePayment {
   id: string;
   raffleId: string;
+  reservationGroupId?: string;
   entryId?: string;
+  entryIds?: string[];
   customerId?: string;
   customerEmail?: string;
   amount: number;
   currency: string;
   paymentMethod: RaffleManualPaymentMethod;
+  paypalOrderId?: string;
+  paypalCaptureId?: string;
+  paypalPayerId?: string;
+  payerEmail?: string;
   paymentReference?: string;
   screenshotUrl?: string;
+  reservationExpiresAt?: string;
+  paidAt?: string;
+  selectedNumbers?: number[];
   isManual: boolean;
   manuallyVerified: boolean;
-  status: "pending" | "approved" | "rejected" | "cancelled";
+  status:
+    | "created"
+    | "pending"
+    | "approved"
+    | "captured"
+    | "completed"
+    | "failed"
+    | "rejected"
+    | "expired"
+    | "cancelled"
+    | "refunded";
   adminNote?: string;
   verifiedBy?: string;
   verifiedAt?: string;

@@ -7,6 +7,7 @@ interface PayPalButtonsComponentOptions {
   };
   createOrder: () => Promise<string> | string;
   onApprove: (data: { orderID: string }) => Promise<void> | void;
+  onCancel?: () => Promise<void> | void;
   onError?: (err: unknown) => void;
 }
 

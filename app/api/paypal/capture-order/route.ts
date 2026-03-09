@@ -3,16 +3,49 @@ import { z } from "zod";
 import { capturePaypalOrder } from "@/lib/paypal";
 import { dispatchNotificationEventSafe } from "@/lib/notifications/orchestrator";
 import { getBookingService, markBookingPaidByOrderService } from "@/lib/runtime-service";
+import { captureRafflePayPalOrderService } from "@/lib/raffles-service";
 
-const captureOrderSchema = z.object({
+const bookingCaptureSchema = z.object({
   bookingId: z.string().uuid(),
-  orderId: z.string().min(3)
+  orderId: z.string().min(3),
+  reservationGroupId: z.never().optional()
 });
+
+const raffleCaptureSchema = z.object({
+  orderId: z.string().min(3),
+  reservationGroupId: z.string().uuid().optional(),
+  bookingId: z.never().optional()
+});
+
+const captureOrderSchema = z.union([bookingCaptureSchema, raffleCaptureSchema]);
 
 export async function POST(request: Request) {
   try {
     const payload = captureOrderSchema.parse(await request.json());
-    const booking = await getBookingService(payload.bookingId);
+
+    if (!("bookingId" in payload)) {
+      const raffleResult = await captureRafflePayPalOrderService({
+        orderId: payload.orderId,
+        reservationGroupId: payload.reservationGroupId
+      });
+
+      return NextResponse.json({
+        ok: true,
+        flow: "raffle",
+        orderId: payload.orderId,
+        status: raffleResult.payment.status,
+        assignedNumbers: raffleResult.assignedNumbers,
+        reservationGroupId: raffleResult.payment.reservationGroupId,
+        idempotent: raffleResult.idempotent
+      });
+    }
+
+    const bookingId = payload.bookingId;
+    if (!bookingId) {
+      return NextResponse.json({ message: "bookingId requerido" }, { status: 400 });
+    }
+
+    const booking = await getBookingService(bookingId);
 
     if (!booking) {
       return NextResponse.json({ message: "Reserva no encontrada" }, { status: 404 });
@@ -65,6 +98,14 @@ export async function POST(request: Request) {
     }
 
     const message = error instanceof Error ? error.message : "Error interno";
-    return NextResponse.json({ message }, { status: 500 });
+    const status =
+      message.includes("reserva")
+      || message.includes("monto")
+      || message.includes("coincide")
+      || message.includes("expir")
+      || message.includes("No se encontró")
+        ? 400
+        : 500;
+    return NextResponse.json({ message }, { status });
   }
 }

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { RafflePayPalButton } from "@/components/raffle-paypal-button";
 import { PaymentMethodLinks } from "@/components/payment-method-links";
 import { PaymentMethodLink } from "@/lib/payment-links";
 import { RafflePaymentMethodConfig } from "@/lib/types";
@@ -55,6 +56,9 @@ export function RaffleEntryForm({
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("");
   const [paymentScreenshotUrl, setPaymentScreenshotUrl] = useState("");
   const [uploadingProof, setUploadingProof] = useState(false);
+  const [reservationGroupId, setReservationGroupId] = useState<string | null>(null);
+  const [reservationExpiresAt, setReservationExpiresAt] = useState<string | null>(null);
+  const [reservedAmount, setReservedAmount] = useState<number | null>(null);
   const [availableNumbers, setAvailableNumbers] = useState(initialAvailableNumbers);
   const [internalChosenNumbers, setInternalChosenNumbers] = useState<number[]>([]);
   const [numberQuery, setNumberQuery] = useState("");
@@ -107,6 +111,10 @@ export function RaffleEntryForm({
     return enabledPaymentMethods.find((method) => method.provider === selectedPaymentMethod) ?? enabledPaymentMethods[0];
   }, [enabledPaymentMethods, selectedPaymentMethod]);
 
+  const isAutomaticPayPalFlow = !isFree
+    && selectedMethodConfig?.provider === "paypal"
+    && selectedMethodConfig.isAutomatic;
+
   useEffect(() => {
     if (!enabledPaymentMethods.length) {
       setSelectedPaymentMethod("");
@@ -117,6 +125,21 @@ export function RaffleEntryForm({
       return exists ? current : enabledPaymentMethods[0].provider;
     });
   }, [enabledPaymentMethods]);
+
+  useEffect(() => {
+    if (!reservationGroupId || isAutomaticPayPalFlow) {
+      return;
+    }
+
+    void fetch("/api/raffles/release-reservation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reservationGroupId, reason: "cancelled" })
+    });
+    setReservationGroupId(null);
+    setReservationExpiresAt(null);
+    setReservedAmount(null);
+  }, [isAutomaticPayPalFlow, reservationGroupId]);
 
   async function handleProofUpload(file: File) {
     setUploadingProof(true);
@@ -180,6 +203,48 @@ export function RaffleEntryForm({
     }
 
     try {
+      if (isAutomaticPayPalFlow) {
+        const reserveResponse = await fetch("/api/raffles/reserve-numbers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            raffleId,
+            customerEmail,
+            chosenNumbers,
+            fullName: fullName.trim(),
+            phone: phone.trim(),
+            note: note.trim() || undefined,
+            referredByCode: referredByCode.trim() || undefined
+          })
+        });
+
+        const reservePayload = (await reserveResponse.json()) as {
+          message?: string;
+          reservation?: {
+            reservationGroupId: string;
+            reservationExpiresAt: string;
+            amount: number;
+          };
+        };
+
+        if (!reserveResponse.ok || !reservePayload.reservation?.reservationGroupId) {
+          throw new Error(reservePayload.message ?? "No se pudieron reservar los números");
+        }
+
+        setReservationGroupId(reservePayload.reservation.reservationGroupId);
+        setReservationExpiresAt(reservePayload.reservation.reservationExpiresAt);
+        setReservedAmount(Number(reservePayload.reservation.amount));
+        setSuccess(
+          `Reserva temporal creada para ${selectedNumbersLabel}. Completa el pago en PayPal antes de ${
+            new Date(reservePayload.reservation.reservationExpiresAt).toLocaleTimeString("es-PR", {
+              hour: "2-digit",
+              minute: "2-digit"
+            })
+          }.`
+        );
+        return;
+      }
+
       const response = await fetch("/api/raffles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -221,6 +286,9 @@ export function RaffleEntryForm({
       setPaymentScreenshotUrl("");
       setNote("");
       setReferredByCode("");
+      setReservationGroupId(null);
+      setReservationExpiresAt(null);
+      setReservedAmount(null);
     } catch (joinError) {
       const errMessage = joinError instanceof Error ? joinError.message : "Error inesperado";
       setError(errMessage);
@@ -471,7 +539,7 @@ export function RaffleEntryForm({
             </label>
           ) : null}
 
-          {requiresScreenshot ? (
+      {requiresScreenshot ? (
             <label>
               Screenshot/comprobante
               <input
@@ -498,10 +566,60 @@ export function RaffleEntryForm({
       ) : null}
 
       <div className={styles.submitRow}>
-        <button className="button-dark" type="submit" disabled={loading || noNumbersLeft}>
-          {loading ? "Enviando..." : noNumbersLeft ? "Números agotados" : compact ? "Confirmar participación" : `Confirmar ${Math.max(chosenNumbers.length, 1)} número(s)`}
+        <button
+          className="button-dark"
+          type="submit"
+          disabled={loading || noNumbersLeft || (isAutomaticPayPalFlow && Boolean(reservationGroupId))}
+        >
+          {loading
+            ? "Procesando..."
+            : noNumbersLeft
+              ? "Números agotados"
+              : isAutomaticPayPalFlow
+                ? reservationGroupId
+                  ? "Reserva creada"
+                  : "Preparar pago PayPal"
+                : compact
+                  ? "Confirmar participación"
+                  : `Confirmar ${Math.max(chosenNumbers.length, 1)} número(s)`}
         </button>
       </div>
+
+      {isAutomaticPayPalFlow && reservationGroupId ? (
+        <div className={styles.paymentDetail}>
+          <p><strong>Reserva lista para pagar:</strong> {selectedNumbersLabel}</p>
+          {reservedAmount !== null ? <p><strong>Total:</strong> {reservedAmount.toFixed(2)} USD</p> : null}
+          {reservationExpiresAt ? (
+            <p className="muted">
+              Expira: {new Date(reservationExpiresAt).toLocaleString("es-PR")}
+            </p>
+          ) : null}
+          <RafflePayPalButton
+            reservationGroupId={reservationGroupId}
+            onPaid={({ assignedNumbers }) => {
+              const assigned = assignedNumbers.length > 0 ? assignedNumbers : chosenNumbers;
+              setAvailableNumbers((current) => current.filter((number) => !assigned.includes(number)));
+              onEntriesCreated?.(assigned);
+              setChosenNumbers([]);
+              setPaymentReference("");
+              setPaymentScreenshotUrl("");
+              setNote("");
+              setReferredByCode("");
+              setReservationGroupId(null);
+              setReservationExpiresAt(null);
+              setReservedAmount(null);
+              setSuccess(`Pago confirmado. Tus números fueron asignados: ${assigned.map((value) => `#${value}`).join(", ")}.`);
+              setError(null);
+            }}
+            onCancelled={() => {
+              setReservationGroupId(null);
+              setReservationExpiresAt(null);
+              setReservedAmount(null);
+              setError("Pago cancelado. Tus números fueron liberados.");
+            }}
+          />
+        </div>
+      ) : null}
 
       {compact ? null : (
         <p className={styles.trustCopy}>
