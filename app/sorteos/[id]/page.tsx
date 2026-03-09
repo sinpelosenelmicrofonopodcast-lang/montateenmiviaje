@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BodyClassToggle } from "@/components/custom/body-class-toggle";
 import { RaffleConversionFlow } from "@/components/custom/raffle-conversion-flow";
 import { RaffleTransparencyAccordion } from "@/components/custom/raffle-transparency-accordion";
 import { getSiteSettingService } from "@/lib/cms-service";
@@ -89,6 +90,7 @@ export default async function SorteoDetailPage({ params }: SorteoDetailPageProps
 
   return (
     <main className="container section">
+      <BodyClassToggle className="route-raffle-detail" />
       <div className={styles.rafflePage}>
         <section className={styles.hero}>
           <Image

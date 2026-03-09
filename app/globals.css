@@ -1211,6 +1211,10 @@ th {
     bottom: 14px;
   }
 
+  body.route-raffle-detail .social-float-dock {
+    display: none;
+  }
+
   .has-tawk-chat .social-float-dock {
     right: auto;
     left: 10px;
