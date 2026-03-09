@@ -13,6 +13,10 @@ export function TawkChatInit() {
       {`
         var Tawk_API = window.Tawk_API || {};
         var Tawk_LoadStart = new Date();
+        document.documentElement.classList.add("has-tawk-chat");
+        if (document.body) {
+          document.body.classList.add("has-tawk-chat");
+        }
         (function() {
           var s1 = document.createElement("script");
           var s0 = document.getElementsByTagName("script")[0];

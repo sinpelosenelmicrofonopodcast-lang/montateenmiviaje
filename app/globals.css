@@ -919,6 +919,11 @@ th {
   gap: 8px;
 }
 
+.has-tawk-chat .social-float-dock {
+  right: auto;
+  left: 18px;
+}
+
 .social-float-link,
 .whatsapp-float {
   border-radius: 999px;
@@ -1204,6 +1209,11 @@ th {
   .social-float-dock {
     right: 10px;
     bottom: 14px;
+  }
+
+  .has-tawk-chat .social-float-dock {
+    right: auto;
+    left: 10px;
   }
 
   .social-float-link,
