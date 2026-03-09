@@ -1033,6 +1033,15 @@ function isMissingPayPalRaffleRpcError(error: { code?: string | null; message?: 
   );
 }
 
+function isStatusConstraintViolation(
+  error: { code?: string | null; message?: string | null } | null | undefined,
+  constraintName: string
+) {
+  const code = (error?.code ?? "").toUpperCase();
+  const message = (error?.message ?? "").toLowerCase();
+  return code === "23514" && message.includes(constraintName.toLowerCase());
+}
+
 function toPublicDisplayName(entry: RaffleEntry, mode: RaffleParticipantsMode) {
   const source = entry.publicDisplayName || entry.customerEmail;
   const [first = "Participante", second = ""] = source.split(" ");
@@ -2489,13 +2498,33 @@ async function reserveRaffleNumbersForPaypalFallbackService(input: {
     };
 
     let paymentInsert = await supabase.from("app_raffle_payments").insert(paymentPayload);
-    if (isMissingColumnError(paymentInsert.error)) {
-      delete paymentPayload.reservation_group_id;
-      delete paymentPayload.entry_ids;
-      delete paymentPayload.selected_numbers;
-      delete paymentPayload.reservation_expires_at;
-      paymentInsert = await supabase.from("app_raffle_payments").insert(paymentPayload);
+    let attemptedMissingColumnFallback = false;
+    let attemptedStatusFallback = false;
+
+    while (paymentInsert.error) {
+      if (!attemptedMissingColumnFallback && isMissingColumnError(paymentInsert.error)) {
+        attemptedMissingColumnFallback = true;
+        delete paymentPayload.reservation_group_id;
+        delete paymentPayload.entry_ids;
+        delete paymentPayload.selected_numbers;
+        delete paymentPayload.reservation_expires_at;
+        paymentInsert = await supabase.from("app_raffle_payments").insert(paymentPayload);
+        continue;
+      }
+
+      if (
+        !attemptedStatusFallback
+        && isStatusConstraintViolation(paymentInsert.error, "app_raffle_payments_status_check")
+      ) {
+        attemptedStatusFallback = true;
+        paymentPayload.status = "pending";
+        paymentInsert = await supabase.from("app_raffle_payments").insert(paymentPayload);
+        continue;
+      }
+
+      break;
     }
+
     if (paymentInsert.error) {
       throw new Error(`No se pudo crear pago pendiente PayPal: ${paymentInsert.error.message}`);
     }
