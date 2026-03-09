@@ -23,8 +23,16 @@ import {
 
 const MANUAL_PAYMENT_METHODS: RaffleManualPaymentMethod[] = ["paypal", "zelle", "cashapp", "ath_movil", "cash", "venmo", "other"];
 const DUE_DRAW_SCAN_INTERVAL_MS = 30_000;
+const RESERVATION_EXPIRY_SCAN_INTERVAL_MS = 30_000;
+const RESERVATION_EXPIRING_NOTICE_WINDOW_MS = 10 * 60 * 1000;
 let lastDueDrawScanAt = 0;
 let dueDrawScanInFlight: Promise<void> | null = null;
+let lastReservationExpiryScanAt = 0;
+let reservationExpiryScanInFlight: Promise<ExpireRaffleReservationsResult> | null = null;
+
+const ENTRY_PENDING_STATUSES: RaffleEntryStatus[] = ["pending_payment", "pending_review", "approved"];
+const ENTRY_ASSIGNED_STATUSES: RaffleEntryStatus[] = ["assigned", "confirmed"];
+const ENTRY_RELEASED_STATUSES: RaffleEntryStatus[] = ["rejected", "expired", "cancelled"];
 
 export interface RegisterCustomerInput {
   fullName?: string;
@@ -84,6 +92,13 @@ export interface CreateRaffleInput {
 export interface DrawRaffleWinnerResult {
   raffle: Raffle;
   winnerEntry: RaffleEntry | null;
+}
+
+export interface ExpireRaffleReservationsResult {
+  scannedAt: string;
+  expiringReminderSent: number;
+  expiredEntries: number;
+  affectedNumbers: number;
 }
 
 export interface BulkRaffleNumberMutationInput {
@@ -291,6 +306,16 @@ interface AppRaffleEntryRow {
   phone?: string | null;
   referral_code?: string | null;
   referred_by_code?: string | null;
+  reservation_expires_at?: string | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  payment_verified_at?: string | null;
+  verification_notes?: string | null;
+  rejection_reason?: string | null;
+  released_at?: string | null;
+  released_reason?: string | null;
+  released_by?: string | null;
+  expiry_reminder_sent_at?: string | null;
   updated_at?: string | null;
   created_at: string;
 }
@@ -470,6 +495,16 @@ function mapRaffleEntry(row: AppRaffleEntryRow): RaffleEntry {
     phone: row.phone ?? undefined,
     referralCode: row.referral_code ?? undefined,
     referredByCode: row.referred_by_code ?? undefined,
+    reservationExpiresAt: row.reservation_expires_at ?? undefined,
+    approvedBy: row.approved_by ?? undefined,
+    approvedAt: row.approved_at ?? undefined,
+    paymentVerifiedAt: row.payment_verified_at ?? undefined,
+    verificationNotes: row.verification_notes ?? undefined,
+    rejectionReason: row.rejection_reason ?? undefined,
+    releasedAt: row.released_at ?? undefined,
+    releasedReason: row.released_reason ?? undefined,
+    releasedBy: row.released_by ?? undefined,
+    expiryReminderSentAt: row.expiry_reminder_sent_at ?? undefined,
     updatedAt: row.updated_at ?? undefined,
     createdAt: row.created_at
   };
@@ -564,14 +599,73 @@ function isUniqueViolation(error: unknown) {
 }
 
 function mapEntryStatusToNumberStatus(status: RaffleEntryStatus): RaffleNumberStatus {
-  if (status === "confirmed") return "sold";
-  if (status === "pending_review") return "pending_manual_review";
+  if (ENTRY_ASSIGNED_STATUSES.includes(status)) return "sold";
+  if (status === "pending_review" || status === "approved") return "pending_manual_review";
   if (status === "pending_payment") return "reserved";
-  return "cancelled";
+  return "available";
 }
 
 function isPendingEntryStatus(status: RaffleEntryStatus) {
-  return status === "pending_payment" || status === "pending_review";
+  return ENTRY_PENDING_STATUSES.includes(status);
+}
+
+function isAssignedEntryStatus(status: RaffleEntryStatus) {
+  return ENTRY_ASSIGNED_STATUSES.includes(status);
+}
+
+function isReleasedEntryStatus(status: RaffleEntryStatus) {
+  return ENTRY_RELEASED_STATUSES.includes(status);
+}
+
+function normalizeReason(value?: string) {
+  if (!value) return undefined;
+  const normalized = value.trim();
+  return normalized.length ? normalized : undefined;
+}
+
+function resolveDefaultReleaseReason(status: RaffleEntryStatus) {
+  if (status === "expired") return "tiempo_expirado";
+  if (status === "rejected") return "pago_no_verificado";
+  if (status === "cancelled") return "cancelado";
+  return "liberado";
+}
+
+function resolveReservationDurationMinutes(input: {
+  isFree: boolean;
+  status: RaffleEntryStatus;
+  methodConfig?: RafflePaymentMethodConfig | null;
+}) {
+  if (input.isFree || isAssignedEntryStatus(input.status) || isReleasedEntryStatus(input.status)) {
+    return null;
+  }
+
+  const config = input.methodConfig?.config;
+  const configMinutes = Number(
+    (config as Record<string, unknown> | undefined)?.reservationMinutes
+      ?? (config as Record<string, unknown> | undefined)?.holdMinutes
+      ?? ""
+  );
+  if (Number.isFinite(configMinutes) && configMinutes > 0) {
+    return Math.min(Math.round(configMinutes), 24 * 60);
+  }
+
+  if (input.status === "pending_review") {
+    return 120;
+  }
+
+  return 30;
+}
+
+function buildReservationExpiresAt(input: {
+  isFree: boolean;
+  status: RaffleEntryStatus;
+  methodConfig?: RafflePaymentMethodConfig | null;
+}) {
+  const minutes = resolveReservationDurationMinutes(input);
+  if (!minutes) {
+    return null;
+  }
+  return new Date(Date.now() + minutes * 60_000).toISOString();
 }
 
 function ensurePaymentMethod(method: string | undefined): RaffleManualPaymentMethod {
@@ -968,24 +1062,129 @@ async function logRaffleAdminAction(input: {
   }
 }
 
+async function listOwnerAdminUserIds() {
+  const supabase = getSupabaseAdminClient();
+  const rows = await supabase
+    .from("profiles")
+    .select("id")
+    .in("role", ["owner", "super_admin", "admin"])
+    .returns<Array<{ id: string }>>();
+
+  if (rows.error) {
+    if (isMissingColumnError(rows.error)) {
+      return [] as string[];
+    }
+    throw new Error(`No se pudieron resolver admins/owner: ${rows.error.message}`);
+  }
+
+  return [...new Set((rows.data ?? []).map((item) => item.id).filter(Boolean))];
+}
+
+function formatChosenNumbers(numbers: number[]) {
+  const uniqueSorted = normalizeEligibleNumbers(numbers);
+  return uniqueSorted.map((value) => `#${value}`).join(", ");
+}
+
+async function sendEntryLifecycleNotifications(input: {
+  eventType:
+    | "RAFFLE_ENTRY_CREATED"
+    | "RAFFLE_ENTRY_REVIEW_REQUIRED"
+    | "RAFFLE_ENTRY_ASSIGNED"
+    | "RAFFLE_ENTRY_REJECTED"
+    | "RAFFLE_ENTRY_EXPIRING"
+    | "RAFFLE_ENTRY_EXPIRED";
+  raffle: AppRaffleRow;
+  entries: AppRaffleEntryRow[];
+  actorId?: string;
+  link?: string;
+  reason?: string;
+}) {
+  const firstEntry = input.entries[0];
+  if (!firstEntry) return;
+  const chosenNumbers = formatChosenNumbers(input.entries.map((entry) => entry.chosen_number));
+  const reservationExpiresAt = firstEntry.reservation_expires_at
+    ? new Date(firstEntry.reservation_expires_at).toLocaleString("es-PR")
+    : undefined;
+
+  if (input.eventType === "RAFFLE_ENTRY_REVIEW_REQUIRED") {
+    const adminIds = await listOwnerAdminUserIds();
+    if (!adminIds.length) return;
+
+    await dispatchNotificationEventSafe({
+      eventType: "RAFFLE_ENTRY_REVIEW_REQUIRED",
+      entityType: "raffle_entry",
+      entityId: firstEntry.id,
+      actorUserId: input.actorId,
+      recipients: { scope: "user_ids", userIds: adminIds },
+      channels: ["inbox", "push", "email"],
+      link: input.link ?? `/admin/sorteos`,
+      variables: {
+        raffleTitle: input.raffle.title,
+        chosenNumbers,
+        customerName: firstEntry.public_display_name ?? firstEntry.customer_email,
+        customerEmail: firstEntry.customer_email,
+        phone: firstEntry.phone ?? "",
+        paymentMethod: firstEntry.payment_method ?? "manual"
+      },
+      metadata: {
+        source: "raffle_entry_needs_review",
+        raffleId: input.raffle.id
+      },
+      dedupeKey: `raffle-entry-review-required:${firstEntry.id}:${firstEntry.updated_at ?? firstEntry.created_at}`
+    });
+    return;
+  }
+
+  await dispatchNotificationEventSafe({
+    eventType: input.eventType,
+    entityType: "raffle_entry",
+    entityId: firstEntry.id,
+    actorUserId: input.actorId,
+    recipients: { scope: "emails", emails: [firstEntry.customer_email] },
+    channels: ["inbox", "push", "email"],
+    link: input.link ?? `/sorteos/${input.raffle.id}`,
+    variables: {
+      raffleTitle: input.raffle.title,
+      chosenNumber: input.entries.length === 1 ? firstEntry.chosen_number : undefined,
+      chosenNumbers,
+      reservationExpiresAt,
+      reason: input.reason ?? ""
+    },
+    metadata: {
+      source: "raffle_entry_lifecycle",
+      raffleId: input.raffle.id,
+      reason: input.reason ?? null
+    },
+    dedupeKey: `raffle-entry-lifecycle:${input.eventType}:${firstEntry.id}:${firstEntry.updated_at ?? firstEntry.created_at}`
+  });
+}
+
 async function syncNumberForEntry(entry: AppRaffleEntryRow, options?: { actorId?: string; paymentMethod?: string }) {
   const supabase = getSupabaseAdminClient();
   const mappedStatus = mapEntryStatusToNumberStatus(entry.status);
+  const shouldRelease = mappedStatus === "available";
+
+  const source =
+    shouldRelease
+      ? "online"
+      : (entry.source ?? "online");
+  const assignedOffline = shouldRelease ? false : source !== "online";
 
   const update = await supabase
     .from("app_raffle_numbers")
     .update({
       status: mappedStatus,
-      entry_id: entry.id,
-      customer_id: entry.customer_id,
-      customer_email: entry.customer_email,
-      source: entry.source ?? "online",
-      assigned_offline: (entry.source ?? "online") !== "online",
-      payment_method: options?.paymentMethod ?? entry.payment_method ?? null,
+      entry_id: shouldRelease ? null : entry.id,
+      customer_id: shouldRelease ? null : entry.customer_id,
+      customer_email: shouldRelease ? null : entry.customer_email,
+      source,
+      assigned_offline: assignedOffline,
+      payment_method: shouldRelease ? null : (options?.paymentMethod ?? entry.payment_method ?? null),
       updated_by: options?.actorId ?? null,
       updated_at: new Date().toISOString(),
-      blocked_reason: mappedStatus === "blocked" ? "manual" : null,
-      blocked_at: mappedStatus === "blocked" ? new Date().toISOString() : null
+      blocked_reason: null,
+      blocked_at: null,
+      blocked_by: null
     })
     .eq("raffle_id", entry.raffle_id)
     .eq("number_value", entry.chosen_number);
@@ -998,9 +1197,6 @@ async function syncNumberForEntry(entry: AppRaffleEntryRow, options?: { actorId?
 async function syncAllNumbersFromEntries(raffleId: string) {
   const entries = await listRaffleEntriesRows(raffleId);
   for (const entry of entries) {
-    if (entry.status === "rejected") {
-      continue;
-    }
     await syncNumberForEntry(entry);
   }
 }
@@ -1021,6 +1217,162 @@ async function listRaffleEntriesRows(raffleId?: string) {
   }
 
   return response.data ?? [];
+}
+
+async function processReservationExpirationsSupabase(options?: {
+  force?: boolean;
+  actorId?: string;
+  reminderWindowMs?: number;
+}): Promise<ExpireRaffleReservationsResult> {
+  const nowMs = Date.now();
+  if (!options?.force && nowMs - lastReservationExpiryScanAt < RESERVATION_EXPIRY_SCAN_INTERVAL_MS) {
+    return {
+      scannedAt: new Date(nowMs).toISOString(),
+      expiringReminderSent: 0,
+      expiredEntries: 0,
+      affectedNumbers: 0
+    };
+  }
+
+  if (reservationExpiryScanInFlight) {
+    return reservationExpiryScanInFlight;
+  }
+
+  reservationExpiryScanInFlight = (async () => {
+    const nowIso = new Date().toISOString();
+    const now = new Date(nowIso);
+    const reminderWindow = options?.reminderWindowMs ?? RESERVATION_EXPIRING_NOTICE_WINDOW_MS;
+    const reminderUpperBoundIso = new Date(now.getTime() + reminderWindow).toISOString();
+    const supabase = getSupabaseAdminClient();
+
+    const reminderRowsResult = await supabase
+      .from("app_raffle_entries")
+      .select("*")
+      .in("status", ENTRY_PENDING_STATUSES)
+      .not("reservation_expires_at", "is", null)
+      .gt("reservation_expires_at", nowIso)
+      .lte("reservation_expires_at", reminderUpperBoundIso)
+      .is("expiry_reminder_sent_at", null)
+      .order("reservation_expires_at", { ascending: true })
+      .returns<AppRaffleEntryRow[]>();
+
+    if (reminderRowsResult.error && !isMissingColumnError(reminderRowsResult.error)) {
+      throw new Error(`No se pudieron buscar reservas por expirar: ${reminderRowsResult.error.message}`);
+    }
+
+    let expiringReminderSent = 0;
+    for (const entry of reminderRowsResult.data ?? []) {
+      const raffle = await getRaffleRowOrThrow(entry.raffle_id);
+      await sendEntryLifecycleNotifications({
+        eventType: "RAFFLE_ENTRY_EXPIRING",
+        raffle,
+        entries: [entry],
+        actorId: options?.actorId
+      });
+
+      const markReminder = await supabase
+        .from("app_raffle_entries")
+        .update({ expiry_reminder_sent_at: nowIso, updated_at: nowIso })
+        .eq("id", entry.id);
+
+      if (markReminder.error && !isMissingColumnError(markReminder.error)) {
+        throw new Error(`No se pudo marcar recordatorio de expiración: ${markReminder.error.message}`);
+      }
+
+      await logRaffleAdminAction({
+        raffleId: entry.raffle_id,
+        actorId: options?.actorId,
+        action: "reservation_expiring_reminder_sent",
+        entityType: "raffle_entry",
+        entityId: entry.id,
+        metadata: {
+          chosenNumber: entry.chosen_number,
+          reservationExpiresAt: entry.reservation_expires_at
+        }
+      });
+      expiringReminderSent += 1;
+    }
+
+    const expiredRowsResult = await supabase
+      .from("app_raffle_entries")
+      .select("*")
+      .in("status", ENTRY_PENDING_STATUSES)
+      .not("reservation_expires_at", "is", null)
+      .lte("reservation_expires_at", nowIso)
+      .order("reservation_expires_at", { ascending: true })
+      .returns<AppRaffleEntryRow[]>();
+
+    if (expiredRowsResult.error && !isMissingColumnError(expiredRowsResult.error)) {
+      throw new Error(`No se pudieron buscar reservas expiradas: ${expiredRowsResult.error.message}`);
+    }
+
+    let expiredEntries = 0;
+    let affectedNumbers = 0;
+    for (const entry of expiredRowsResult.data ?? []) {
+      const updateResult = await supabase
+        .from("app_raffle_entries")
+        .update({
+          status: "expired",
+          released_at: nowIso,
+          released_reason: "tiempo_expirado",
+          released_by: options?.actorId ?? null,
+          reservation_expires_at: null,
+          updated_at: nowIso
+        })
+        .eq("id", entry.id)
+        .in("status", ENTRY_PENDING_STATUSES)
+        .select("*")
+        .maybeSingle<AppRaffleEntryRow>();
+
+      if (updateResult.error) {
+        throw new Error(`No se pudo expirar participación ${entry.id}: ${updateResult.error.message}`);
+      }
+
+      if (!updateResult.data) {
+        continue;
+      }
+
+      await syncNumberForEntry(updateResult.data, { actorId: options?.actorId });
+      affectedNumbers += 1;
+      expiredEntries += 1;
+
+      const raffle = await getRaffleRowOrThrow(updateResult.data.raffle_id);
+      await sendEntryLifecycleNotifications({
+        eventType: "RAFFLE_ENTRY_EXPIRED",
+        raffle,
+        entries: [updateResult.data],
+        actorId: options?.actorId
+      });
+
+      await logRaffleAdminAction({
+        raffleId: updateResult.data.raffle_id,
+        actorId: options?.actorId,
+        action: "reservation_expired",
+        entityType: "raffle_entry",
+        entityId: updateResult.data.id,
+        metadata: {
+          chosenNumber: updateResult.data.chosen_number,
+          previousStatus: entry.status,
+          nextStatus: updateResult.data.status
+        }
+      });
+    }
+
+    return {
+      scannedAt: nowIso,
+      expiringReminderSent,
+      expiredEntries,
+      affectedNumbers
+    } satisfies ExpireRaffleReservationsResult;
+  })();
+
+  try {
+    const result = await reservationExpiryScanInFlight;
+    lastReservationExpiryScanAt = Date.now();
+    return result;
+  } finally {
+    reservationExpiryScanInFlight = null;
+  }
 }
 
 async function drawRaffleWinnerSupabase(
@@ -1060,6 +1412,7 @@ async function drawRaffleWinnerSupabase(
     throw new Error("Aún no llega la hora del sorteo");
   }
 
+  await processReservationExpirationsSupabase({ force: true, actorId: options?.actorId });
   await ensureRaffleNumbersSeeded(raffle.id, raffle.number_pool_size);
   await syncAllNumbersFromEntries(raffleId);
 
@@ -1276,6 +1629,11 @@ async function runDueRaffleDrawsSupabase(options?: { force?: boolean }) {
   }
 }
 
+async function runRaffleRuntimeMaintenance(options?: { force?: boolean }) {
+  await processReservationExpirationsSupabase({ force: options?.force });
+  await runDueRaffleDrawsSupabase({ force: options?.force });
+}
+
 export async function registerCustomerService(input: RegisterCustomerInput) {
   ensureConfigured();
 
@@ -1316,7 +1674,7 @@ export async function registerCustomerService(input: RegisterCustomerInput) {
 export async function listRafflesService(options?: { includeDrafts?: boolean; includeClosed?: boolean }) {
   ensureConfigured();
 
-  await runDueRaffleDrawsSupabase();
+  await runRaffleRuntimeMaintenance();
 
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
@@ -1343,7 +1701,7 @@ export async function listRafflesService(options?: { includeDrafts?: boolean; in
 export async function getRaffleByIdService(raffleId: string) {
   ensureConfigured();
 
-  await runDueRaffleDrawsSupabase();
+  await runRaffleRuntimeMaintenance();
   const supabase = getSupabaseAdminClient();
   const { data, error } = await supabase
     .from("app_raffles")
@@ -1364,7 +1722,7 @@ export async function getRaffleByIdService(raffleId: string) {
 
 export async function listRaffleEntriesService(raffleId?: string) {
   ensureConfigured();
-  await runDueRaffleDrawsSupabase();
+  await runRaffleRuntimeMaintenance();
 
   return (await listRaffleEntriesRows(raffleId)).map(mapRaffleEntry);
 }
@@ -1375,7 +1733,7 @@ export async function listRaffleNumbersService(raffleId: string, options?: {
   limit?: number;
 }) {
   ensureConfigured();
-  await runDueRaffleDrawsSupabase();
+  await runRaffleRuntimeMaintenance();
 
   const raffle = await getRaffleRowOrThrow(raffleId);
   await ensureRaffleNumbersSeeded(raffle.id, raffle.number_pool_size);
@@ -1417,7 +1775,7 @@ export async function listRaffleNumbersService(raffleId: string, options?: {
 export async function listAvailableRaffleNumbersService(raffleId: string) {
   ensureConfigured();
 
-  await runDueRaffleDrawsSupabase();
+  await runRaffleRuntimeMaintenance();
   const raffle = await getRaffleRowOrThrow(raffleId);
   await ensureRaffleNumbersSeeded(raffle.id, raffle.number_pool_size);
 
@@ -1628,7 +1986,7 @@ export async function enterRaffleService(
 ) {
   ensureConfigured();
 
-  await runDueRaffleDrawsSupabase();
+  await runRaffleRuntimeMaintenance();
   const raffle = await getRaffleRowOrThrow(raffleId);
 
   if (raffle.status !== "published") {
@@ -1721,10 +2079,15 @@ export async function enterRaffleService(
   const finalPaymentMethod = selectedMethodConfig?.provider ?? requestedPaymentMethod ?? "other";
 
   const status: RaffleEntryStatus = raffle.is_free
-    ? "confirmed"
+    ? "assigned"
     : normalizedPaymentReference || normalizedScreenshotUrl
       ? "pending_review"
       : "pending_payment";
+  const reservationExpiresAt = buildReservationExpiresAt({
+    isFree: raffle.is_free,
+    status,
+    methodConfig: selectedMethodConfig ?? null
+  });
 
   const referralCode = toReferralCode(customer.data.email);
   const paymentMethod = finalPaymentMethod;
@@ -1732,27 +2095,59 @@ export async function enterRaffleService(
   const createdEntries: AppRaffleEntryRow[] = [];
 
   for (const chosenNumber of chosenNumbers) {
-    const insert = await supabase
+    const nowIso = new Date().toISOString();
+    const entryPayload: Record<string, unknown> = {
+      raffle_id: raffleId,
+      customer_id: customer.data.id,
+      customer_email: customer.data.email,
+      chosen_number: chosenNumber,
+      payment_reference: normalizedPaymentReference ?? null,
+      note: note ?? null,
+      status,
+      source: "online",
+      public_display_name: options?.publicDisplayName?.trim() || null,
+      consent_public_listing: options?.consentPublicListing ?? false,
+      payment_method: paymentMethod ?? null,
+      phone: normalizePhone(options?.phone) ?? null,
+      referral_code: referralCode,
+      referred_by_code: options?.referredByCode?.trim() || null,
+      reservation_expires_at: reservationExpiresAt,
+      approved_by: raffle.is_free ? customer.data.auth_user_id ?? null : null,
+      approved_at: raffle.is_free ? nowIso : null,
+      payment_verified_at: raffle.is_free ? nowIso : null,
+      verification_notes: raffle.is_free ? "sorteo_gratis_auto_asignado" : null,
+      rejection_reason: null,
+      released_at: null,
+      released_reason: null,
+      released_by: null,
+      expiry_reminder_sent_at: null,
+      updated_at: nowIso
+    };
+
+    let insert = await supabase
       .from("app_raffle_entries")
-      .insert({
-        raffle_id: raffleId,
-        customer_id: customer.data.id,
-        customer_email: customer.data.email,
-        chosen_number: chosenNumber,
-        payment_reference: normalizedPaymentReference ?? null,
-        note: note ?? null,
-        status,
-        source: "online",
-        public_display_name: options?.publicDisplayName?.trim() || null,
-        consent_public_listing: options?.consentPublicListing ?? false,
-        payment_method: paymentMethod ?? null,
-        phone: normalizePhone(options?.phone) ?? null,
-        referral_code: referralCode,
-        referred_by_code: options?.referredByCode?.trim() || null,
-        updated_at: new Date().toISOString()
-      })
+      .insert(entryPayload)
       .select("*")
       .single<AppRaffleEntryRow>();
+
+    if (isMissingColumnError(insert.error)) {
+      delete entryPayload.reservation_expires_at;
+      delete entryPayload.approved_by;
+      delete entryPayload.approved_at;
+      delete entryPayload.payment_verified_at;
+      delete entryPayload.verification_notes;
+      delete entryPayload.rejection_reason;
+      delete entryPayload.released_at;
+      delete entryPayload.released_reason;
+      delete entryPayload.released_by;
+      delete entryPayload.expiry_reminder_sent_at;
+
+      insert = await supabase
+        .from("app_raffle_entries")
+        .insert(entryPayload)
+        .select("*")
+        .single<AppRaffleEntryRow>();
+    }
 
     if (insert.error || !insert.data) {
       if (isUniqueViolation(insert.error)) {
@@ -1808,34 +2203,46 @@ export async function enterRaffleService(
       }
     }
 
-    if (status === "confirmed") {
-      await dispatchNotificationEventSafe({
-        eventType: "RAFFLE_ENTRY_CONFIRMED",
-        entityType: "raffle_entry",
-        entityId: insert.data.id,
-        recipients: { scope: "raffle_entry_id", entryId: insert.data.id },
-        channels: ["inbox", "push", "email"],
-        variables: {
-          raffleTitle: raffle.title,
-          chosenNumber: insert.data.chosen_number,
-          link: `/sorteos/${raffleId}`
-        },
-        link: "/portal",
-        metadata: {
-          source: "raffle_entry_auto_confirmed",
-          raffleId
-        },
-        dedupeKey: `raffle-entry-confirmed:${insert.data.id}`
+    createdEntries.push(insert.data);
+  }
+
+  if (createdEntries.length > 0) {
+    if (isAssignedEntryStatus(status)) {
+      await sendEntryLifecycleNotifications({
+        eventType: "RAFFLE_ENTRY_ASSIGNED",
+        raffle,
+        entries: createdEntries,
+        link: "/portal"
+      });
+    } else {
+      await sendEntryLifecycleNotifications({
+        eventType: "RAFFLE_ENTRY_CREATED",
+        raffle,
+        entries: createdEntries,
+        link: "/portal"
+      });
+      await sendEntryLifecycleNotifications({
+        eventType: "RAFFLE_ENTRY_REVIEW_REQUIRED",
+        raffle,
+        entries: createdEntries,
+        link: `/admin/sorteos`
       });
     }
-
-    createdEntries.push(insert.data);
   }
 
   return createdEntries.map(mapRaffleEntry);
 }
 
-export async function updateRaffleEntryStatusService(entryId: string, status: RaffleEntryStatus, actorId?: string) {
+export async function updateRaffleEntryStatusService(
+  entryId: string,
+  status: RaffleEntryStatus,
+  options?: {
+    actorId?: string;
+    reason?: string;
+    verificationNotes?: string;
+    skipNotification?: boolean;
+  }
+) {
   ensureConfigured();
 
   const entry = await getEntryById(entryId);
@@ -1849,13 +2256,62 @@ export async function updateRaffleEntryStatusService(entryId: string, status: Ra
   }
 
   const supabase = getSupabaseAdminClient();
+  const nowIso = new Date().toISOString();
+  const reason = normalizeReason(options?.reason) ?? normalizeReason(entry.released_reason ?? undefined);
+  const verificationNotes = normalizeReason(options?.verificationNotes);
+  const isAssigned = isAssignedEntryStatus(status);
+  const isReleased = isReleasedEntryStatus(status);
+  const releaseReason = reason ?? resolveDefaultReleaseReason(status);
+  const keepPending = isPendingEntryStatus(status);
+  const existingReservation = entry.reservation_expires_at ?? undefined;
+  const reservationExpiresAt = keepPending
+    ? existingReservation ?? buildReservationExpiresAt({ isFree: false, status })
+    : null;
+  const approvedAt = isAssigned ? entry.approved_at ?? nowIso : null;
+  const approvedBy = isAssigned ? options?.actorId ?? entry.approved_by ?? null : null;
+  const paymentVerifiedAt = isAssigned ? nowIso : null;
 
-  const updated = await supabase
+  const patchPayload: Record<string, unknown> = {
+    status,
+    reservation_expires_at: reservationExpiresAt,
+    approved_by: approvedBy,
+    approved_at: approvedAt,
+    payment_verified_at: paymentVerifiedAt,
+    verification_notes: isAssigned
+      ? verificationNotes ?? entry.verification_notes ?? null
+      : keepPending
+        ? entry.verification_notes ?? null
+        : verificationNotes ?? entry.verification_notes ?? null,
+    rejection_reason: status === "rejected" ? releaseReason : null,
+    released_at: isReleased ? nowIso : null,
+    released_reason: isReleased ? releaseReason : null,
+    released_by: isReleased ? options?.actorId ?? null : null,
+    updated_at: nowIso
+  };
+
+  let updated = await supabase
     .from("app_raffle_entries")
-    .update({ status, updated_at: new Date().toISOString() })
+    .update(patchPayload)
     .eq("id", entryId)
     .select("*")
     .single<AppRaffleEntryRow>();
+
+  if (isMissingColumnError(updated.error)) {
+    const fallbackPayload: Record<string, unknown> = {
+      status,
+      updated_at: nowIso
+    };
+    if (status === "rejected") {
+      fallbackPayload.note = releaseReason;
+    }
+
+    updated = await supabase
+      .from("app_raffle_entries")
+      .update(fallbackPayload)
+      .eq("id", entryId)
+      .select("*")
+      .single<AppRaffleEntryRow>();
+  }
 
   if (updated.error || !updated.data) {
     if (isUniqueViolation(updated.error)) {
@@ -1865,37 +2321,51 @@ export async function updateRaffleEntryStatusService(entryId: string, status: Ra
     throw new Error(`No se pudo actualizar participación: ${updated.error?.message ?? "sin datos"}`);
   }
 
-  await syncNumberForEntry(updated.data, { actorId });
+  await syncNumberForEntry(updated.data, { actorId: options?.actorId });
 
   await logRaffleAdminAction({
     raffleId: entry.raffle_id,
-    actorId,
+    actorId: options?.actorId,
     action: "entry_status_updated",
     entityType: "raffle_entry",
     entityId: entryId,
-    metadata: { previousStatus: entry.status, nextStatus: status, chosenNumber: entry.chosen_number }
+    metadata: {
+      previousStatus: entry.status,
+      nextStatus: status,
+      chosenNumber: entry.chosen_number,
+      releaseReason: isReleased ? releaseReason : null,
+      verificationNotes: verificationNotes ?? null
+    }
   });
 
-  if (status === "confirmed" && entry.status !== "confirmed") {
-    await dispatchNotificationEventSafe({
-      eventType: "RAFFLE_ENTRY_CONFIRMED",
-      entityType: "raffle_entry",
-      entityId: updated.data.id,
-      actorUserId: actorId,
-      recipients: { scope: "raffle_entry_id", entryId: updated.data.id },
-      channels: ["inbox", "push", "email"],
-      variables: {
-        raffleTitle: raffle.title,
-        chosenNumber: updated.data.chosen_number,
-        link: `/sorteos/${entry.raffle_id}`
-      },
-      link: "/portal",
-      metadata: {
-        source: "raffle_entry_status_update",
-        raffleId: entry.raffle_id
-      },
-      dedupeKey: `raffle-entry-confirmed:${updated.data.id}:status`
-    });
+  if (!options?.skipNotification) {
+    if (isAssigned && !isAssignedEntryStatus(entry.status)) {
+      await sendEntryLifecycleNotifications({
+        eventType: "RAFFLE_ENTRY_ASSIGNED",
+        raffle,
+        entries: [updated.data],
+        actorId: options?.actorId,
+        link: "/portal"
+      });
+    } else if (status === "rejected" && entry.status !== "rejected") {
+      await sendEntryLifecycleNotifications({
+        eventType: "RAFFLE_ENTRY_REJECTED",
+        raffle,
+        entries: [updated.data],
+        actorId: options?.actorId,
+        link: `/sorteos/${entry.raffle_id}`,
+        reason: releaseReason
+      });
+    } else if (status === "expired" && entry.status !== "expired") {
+      await sendEntryLifecycleNotifications({
+        eventType: "RAFFLE_ENTRY_EXPIRED",
+        raffle,
+        entries: [updated.data],
+        actorId: options?.actorId,
+        link: `/sorteos/${entry.raffle_id}`,
+        reason: releaseReason
+      });
+    }
   }
 
   return mapRaffleEntry(updated.data);
@@ -1923,7 +2393,7 @@ export async function updateRaffleStatusService(raffleId: string, status: Raffle
 
   if (status === "published") {
     await ensureRaffleNumbersSeeded(raffleId, updated.data.number_pool_size);
-    await runDueRaffleDrawsSupabase();
+    await runRaffleRuntimeMaintenance();
     const current = await getRaffleRowOrThrow(raffleId);
 
     await logRaffleAdminAction({
@@ -2339,29 +2809,66 @@ export async function registerOfflineRaffleSaleService(input: RegisterOfflineRaf
       throw new Error(`El número #${number} no está disponible`);
     }
 
-    const status: RaffleEntryStatus = input.markAsConfirmed === false ? "pending_review" : "confirmed";
+    const status: RaffleEntryStatus = input.markAsConfirmed === false ? "pending_review" : "assigned";
     const paymentMethod = ensurePaymentMethod(input.paymentMethod);
+    const reservationExpiresAt = buildReservationExpiresAt({
+      isFree: raffle.is_free,
+      status,
+      methodConfig: null
+    });
+    const nowIso = new Date().toISOString();
 
-    const entryInsert = await supabase
+    const entryPayload: Record<string, unknown> = {
+      raffle_id: raffle.id,
+      customer_id: customerUpsert.data.id,
+      customer_email: customerUpsert.data.email,
+      chosen_number: number,
+      payment_reference: input.paymentReference ?? null,
+      note: input.note ?? null,
+      status,
+      source: "offline",
+      public_display_name: fullName,
+      consent_public_listing: true,
+      payment_method: paymentMethod,
+      phone: phone ?? null,
+      referral_code: toReferralCode(email),
+      reservation_expires_at: reservationExpiresAt,
+      approved_by: input.markAsConfirmed === false ? null : input.actorId ?? null,
+      approved_at: input.markAsConfirmed === false ? null : nowIso,
+      payment_verified_at: input.markAsConfirmed === false ? null : nowIso,
+      verification_notes: input.note ?? null,
+      rejection_reason: null,
+      released_at: null,
+      released_reason: null,
+      released_by: null,
+      expiry_reminder_sent_at: null,
+      updated_at: new Date().toISOString()
+    };
+
+    let entryInsert = await supabase
       .from("app_raffle_entries")
-      .insert({
-        raffle_id: raffle.id,
-        customer_id: customerUpsert.data.id,
-        customer_email: customerUpsert.data.email,
-        chosen_number: number,
-        payment_reference: input.paymentReference ?? null,
-        note: input.note ?? null,
-        status,
-        source: "offline",
-        public_display_name: fullName,
-        consent_public_listing: true,
-        payment_method: paymentMethod,
-        phone: phone ?? null,
-        referral_code: toReferralCode(email),
-        updated_at: new Date().toISOString()
-      })
+      .insert(entryPayload)
       .select("*")
       .single<AppRaffleEntryRow>();
+
+    if (isMissingColumnError(entryInsert.error)) {
+      delete entryPayload.reservation_expires_at;
+      delete entryPayload.approved_by;
+      delete entryPayload.approved_at;
+      delete entryPayload.payment_verified_at;
+      delete entryPayload.verification_notes;
+      delete entryPayload.rejection_reason;
+      delete entryPayload.released_at;
+      delete entryPayload.released_reason;
+      delete entryPayload.released_by;
+      delete entryPayload.expiry_reminder_sent_at;
+
+      entryInsert = await supabase
+        .from("app_raffle_entries")
+        .insert(entryPayload)
+        .select("*")
+        .single<AppRaffleEntryRow>();
+    }
 
     if (entryInsert.error || !entryInsert.data) {
       if (isUniqueViolation(entryInsert.error)) {
@@ -2422,6 +2929,29 @@ export async function registerOfflineRaffleSaleService(input: RegisterOfflineRaf
       paymentIds: createdPaymentIds
     }
   });
+
+  if (entries.length > 0) {
+    const latestRows = await Promise.all(entries.map((entry) => getEntryById(entry.id)));
+    const validRows = latestRows.filter((item): item is AppRaffleEntryRow => Boolean(item));
+    if (validRows.length > 0) {
+      await sendEntryLifecycleNotifications({
+        eventType: input.markAsConfirmed === false ? "RAFFLE_ENTRY_CREATED" : "RAFFLE_ENTRY_ASSIGNED",
+        raffle,
+        entries: validRows,
+        actorId: input.actorId,
+        link: input.markAsConfirmed === false ? `/sorteos/${raffle.id}` : "/portal"
+      });
+      if (input.markAsConfirmed === false) {
+        await sendEntryLifecycleNotifications({
+          eventType: "RAFFLE_ENTRY_REVIEW_REQUIRED",
+          raffle,
+          entries: validRows,
+          actorId: input.actorId,
+          link: "/admin/sorteos"
+        });
+      }
+    }
+  }
 
   return {
     ok: true,
@@ -2491,14 +3021,25 @@ export async function updateRafflePaymentManualStatusService(input: {
     throw new Error(`No se pudo actualizar pago: ${updated.error?.message ?? "sin datos"}`);
   }
 
+  let syncedEntry: RaffleEntry | null = null;
+  let raffleForEntry: AppRaffleRow | null = null;
   if (updated.data.entry_id) {
     const entryStatus: RaffleEntryStatus = input.status === "approved"
-      ? "confirmed"
+      ? "assigned"
       : input.status === "rejected"
         ? "rejected"
         : "cancelled";
 
-    await updateRaffleEntryStatusService(updated.data.entry_id, entryStatus, input.actorId);
+    syncedEntry = await updateRaffleEntryStatusService(updated.data.entry_id, entryStatus, {
+      actorId: input.actorId,
+      reason: input.status === "approved" ? undefined : input.adminNote ?? "pago_no_validado",
+      verificationNotes: input.adminNote,
+      skipNotification: true
+    });
+
+    if (syncedEntry?.raffleId) {
+      raffleForEntry = await getRaffleRowOrThrow(syncedEntry.raffleId);
+    }
   }
 
   await logRaffleAdminAction({
@@ -2514,22 +3055,19 @@ export async function updateRafflePaymentManualStatusService(input: {
     }
   });
 
-  const paymentRecipients = updated.data.entry_id
-    ? { scope: "raffle_entry_id" as const, entryId: updated.data.entry_id }
-    : {
-        scope: "emails" as const,
-        emails: [updated.data.customer_email].filter(
-          (email): email is string => typeof email === "string" && email.trim().length > 0
-        )
-      };
-
-  if (input.status === "approved") {
+  if (!syncedEntry && updated.data.customer_email) {
+    const fallbackRecipients = {
+      scope: "emails" as const,
+      emails: [updated.data.customer_email].filter(
+        (email): email is string => typeof email === "string" && email.trim().length > 0
+      )
+    };
     await dispatchNotificationEventSafe({
-      eventType: "PAYMENT_CONFIRMED",
+      eventType: input.status === "approved" ? "PAYMENT_CONFIRMED" : "PAYMENT_FAILED",
       entityType: "raffle_payment",
       entityId: input.paymentId,
       actorUserId: input.actorId,
-      recipients: paymentRecipients,
+      recipients: fallbackRecipients,
       channels: ["inbox", "push", "email"],
       variables: {
         amount: Number(updated.data.amount),
@@ -2537,31 +3075,36 @@ export async function updateRafflePaymentManualStatusService(input: {
       },
       link: "/portal/pagos",
       metadata: {
-        source: "raffle_manual_payment_approved",
-        raffleId: existing.data.raffle_id
-      },
-      dedupeKey: `raffle-payment:${input.paymentId}:approved:${updated.data.updated_at}`
-    });
-  } else {
-    await dispatchNotificationEventSafe({
-      eventType: "PAYMENT_FAILED",
-      entityType: "raffle_payment",
-      entityId: input.paymentId,
-      actorUserId: input.actorId,
-      recipients: paymentRecipients,
-      channels: ["inbox", "push", "email"],
-      variables: {
-        amount: Number(updated.data.amount),
-        link: "/portal/pagos"
-      },
-      link: "/portal/pagos",
-      metadata: {
-        source: "raffle_manual_payment_not_approved",
+        source: "raffle_manual_payment_fallback_notification",
         raffleId: existing.data.raffle_id,
         status: input.status
       },
-      dedupeKey: `raffle-payment:${input.paymentId}:${input.status}:${updated.data.updated_at}`
+      dedupeKey: `raffle-payment-fallback:${input.paymentId}:${input.status}:${updated.data.updated_at}`
     });
+  }
+
+  if (syncedEntry && raffleForEntry) {
+    const updatedEntryRow = await getEntryById(syncedEntry.id);
+    if (updatedEntryRow) {
+      if (input.status === "approved") {
+        await sendEntryLifecycleNotifications({
+          eventType: "RAFFLE_ENTRY_ASSIGNED",
+          raffle: raffleForEntry,
+          entries: [updatedEntryRow],
+          actorId: input.actorId,
+          link: "/portal"
+        });
+      } else {
+        await sendEntryLifecycleNotifications({
+          eventType: "RAFFLE_ENTRY_REJECTED",
+          raffle: raffleForEntry,
+          entries: [updatedEntryRow],
+          actorId: input.actorId,
+          link: `/sorteos/${raffleForEntry.id}`,
+          reason: input.adminNote ?? input.status
+        });
+      }
+    }
   }
 
   return mapRafflePayment(updated.data);
@@ -2651,7 +3194,7 @@ export async function listPublicRaffleParticipantsService(raffleId: string) {
   }
 
   const entries = await listRaffleEntriesService(raffleId);
-  const filtered = entries.filter((entry) => entry.status === "confirmed" && (entry.consentPublicListing ?? true));
+  const filtered = entries.filter((entry) => isAssignedEntryStatus(entry.status) && (entry.consentPublicListing ?? true));
 
   return filtered.map((entry) => ({
     entryId: entry.id,
@@ -2698,7 +3241,7 @@ export async function getRafflePublicSummaryService(raffleId: string): Promise<R
       blockedNumbers,
       reservedNumbers,
       progressPercent: raffle.numberPoolSize > 0 ? Math.round((soldNumbers / raffle.numberPoolSize) * 100) : 0,
-      confirmedEntries: entries.filter((entry) => entry.status === "confirmed").length,
+      confirmedEntries: entries.filter((entry) => isAssignedEntryStatus(entry.status)).length,
       countdownTo: raffle.drawAt
     },
     publicGridMode: mode,
@@ -2804,9 +3347,9 @@ export async function getRaffleAdminSnapshotService(raffleId: string): Promise<R
       sold: numbers.filter((item) => item.status === "sold").length,
       cancelled: numbers.filter((item) => item.status === "cancelled").length,
       winners: numbers.filter((item) => item.status === "winner").length,
-      confirmedEntries: entries.filter((item) => item.status === "confirmed").length,
+      confirmedEntries: entries.filter((item) => isAssignedEntryStatus(item.status)).length,
       pendingEntries: entries.filter((item) => isPendingEntryStatus(item.status)).length,
-      rejectedEntries: entries.filter((item) => item.status === "rejected" || item.status === "cancelled").length,
+      rejectedEntries: entries.filter((item) => isReleasedEntryStatus(item.status)).length,
       offlineEntries: entries.filter((item) => item.source === "offline" || item.source === "admin_manual").length,
       conversionsFromReferral: referrals.reduce((sum, item) => sum + item.conversions, 0)
     },
@@ -2841,6 +3384,15 @@ export async function drawRaffleWinnerService(raffleId: string, actorId?: string
   ensureConfigured();
 
   return drawRaffleWinnerSupabase(raffleId, { force: true, actorId });
+}
+
+export async function processExpiredRaffleReservationsService(options?: {
+  force?: boolean;
+  actorId?: string;
+  reminderWindowMs?: number;
+}) {
+  ensureConfigured();
+  return processReservationExpirationsSupabase(options);
 }
 
 export async function prepareVerifiedRaffleService(raffleId: string, actorId?: string) {

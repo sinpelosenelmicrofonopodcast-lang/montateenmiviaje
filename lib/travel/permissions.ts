@@ -11,6 +11,7 @@ const ALL_PERMISSIONS: TravelPermission[] = [
 ];
 
 const ROLE_PERMISSION_MAP: Record<AppRole, TravelPermission[]> = {
+  owner: ALL_PERMISSIONS,
   super_admin: ALL_PERMISSIONS,
   admin: ALL_PERMISSIONS,
   manager: ALL_PERMISSIONS,

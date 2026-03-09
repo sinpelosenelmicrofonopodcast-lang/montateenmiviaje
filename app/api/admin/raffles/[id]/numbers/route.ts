@@ -50,7 +50,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await requireAdminServerAccess();
+  const auth = await requireAdminServerAccess();
   try {
     const { id } = await params;
     const payload = bulkSchema.parse(await request.json());
@@ -60,7 +60,8 @@ export async function PATCH(
       action: payload.action,
       note: payload.note,
       blockedReason: payload.blockedReason,
-      paymentMethod: payload.paymentMethod
+      paymentMethod: payload.paymentMethod,
+      actorId: auth.user?.id
     });
 
     return NextResponse.json(result);

@@ -5,7 +5,7 @@ import { RaffleEntryForm } from "@/components/custom/raffle-entry-form";
 import { RaffleNumberPicker } from "@/components/custom/raffle-number-picker";
 import { PaymentMethodLinks } from "@/components/payment-method-links";
 import { PaymentMethodLink } from "@/lib/payment-links";
-import { RafflePaymentMethodConfig } from "@/lib/types";
+import { RaffleNumberStatus, RafflePaymentMethodConfig } from "@/lib/types";
 
 interface RaffleConversionFlowProps {
   raffleId: string;
@@ -15,6 +15,7 @@ interface RaffleConversionFlowProps {
   paymentMethods: RafflePaymentMethodConfig[];
   paymentNote?: string;
   initialAvailableNumbers: number[];
+  numberStates?: Array<{ number: number; status: RaffleNumberStatus }>;
   prefilledEmail?: string;
   isAuthenticated?: boolean;
 }
@@ -29,6 +30,7 @@ export function RaffleConversionFlow({
   paymentMethods,
   paymentNote,
   initialAvailableNumbers,
+  numberStates,
   prefilledEmail,
   isAuthenticated
 }: RaffleConversionFlowProps) {
@@ -46,6 +48,7 @@ export function RaffleConversionFlow({
     <>
       <RaffleNumberPicker
         availableNumbers={availableNumbers}
+        numberStates={numberStates}
         selectedNumbers={selectedNumbers}
         onSelectedNumbersChange={setSelectedNumbers}
       />

@@ -3,7 +3,13 @@ export type NotificationChannel = "push" | "email" | "inbox";
 export type NotificationEventType =
   | "RAFFLE_PUBLISHED"
   | "TRIP_PUBLISHED"
+  | "RAFFLE_ENTRY_CREATED"
+  | "RAFFLE_ENTRY_REVIEW_REQUIRED"
   | "RAFFLE_ENTRY_CONFIRMED"
+  | "RAFFLE_ENTRY_ASSIGNED"
+  | "RAFFLE_ENTRY_REJECTED"
+  | "RAFFLE_ENTRY_EXPIRED"
+  | "RAFFLE_ENTRY_EXPIRING"
   | "TRIP_BOOKING_UPDATED"
   | "PAYMENT_CONFIRMED"
   | "PAYMENT_FAILED"

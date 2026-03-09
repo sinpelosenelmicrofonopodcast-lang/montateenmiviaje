@@ -65,7 +65,12 @@ export function resolveNotificationTemplate(
   const raffleTitle = asString(variables.raffleTitle, "nueva rifa");
   const tripTitle = asString(variables.tripTitle, "nuevo viaje");
   const chosenNumber = asNumber(variables.chosenNumber);
+  const chosenNumbers = asString(variables.chosenNumbers, "");
   const paymentAmount = asNumber(variables.amount);
+  const reservationExpiresAt = asString(variables.reservationExpiresAt, "");
+  const reservationExpirationText = reservationExpiresAt
+    ? `Reserva vigente hasta ${reservationExpiresAt}.`
+    : "Completa el pago para mantener tu reserva.";
   const fallbackLink = asString(variables.link, "/");
 
   let base: Omit<NotificationTemplateResult, "email"> & {
@@ -107,24 +112,134 @@ export function resolveNotificationTemplate(
         }
       };
       break;
-    case "RAFFLE_ENTRY_CONFIRMED":
+    case "RAFFLE_ENTRY_CREATED":
       base = {
-        title: "Participación confirmada",
-        message: chosenNumber
-          ? `Tu número #${chosenNumber} fue confirmado en el sorteo.`
-          : "Tu participación en el sorteo fue confirmada.",
+        title: "Solicitud recibida",
+        message: chosenNumbers
+          ? `Recibimos tu solicitud para ${chosenNumbers}. Pago pendiente de verificación.`
+          : "Recibimos tu solicitud de participación. Pago pendiente de verificación.",
         link: linkOverride ?? fallbackLink ?? "/portal",
         kind: "raffle",
         audience: "transactional",
         email: {
-          subject: "Tu participación fue confirmada",
+          subject: "Recibimos tu solicitud de participación",
+          preheader: "Tus números quedaron reservados temporalmente.",
+          heading: "Solicitud recibida",
+          body: chosenNumbers
+            ? `Reservamos temporalmente ${chosenNumbers}. ${reservationExpirationText}`
+            : `Tu solicitud quedó en revisión. ${reservationExpirationText}`,
+          ctaLabel: "Ver estado",
+          ctaHref: linkOverride ?? fallbackLink ?? "/portal"
+        }
+      };
+      break;
+    case "RAFFLE_ENTRY_REVIEW_REQUIRED":
+      base = {
+        title: "Pago de rifa pendiente de revisión",
+        message: chosenNumbers
+          ? `Nueva solicitud para ${chosenNumbers}. Revisa y aprueba/rechaza en admin.`
+          : "Nueva solicitud de rifa pendiente de revisión.",
+        link: linkOverride ?? fallbackLink ?? "/admin/sorteos",
+        kind: "admin",
+        audience: "transactional",
+        email: {
+          subject: "Nueva solicitud de rifa pendiente",
+          preheader: "Requiere revisión manual de pago.",
+          heading: "Pago pendiente de revisión",
+          body: chosenNumbers
+            ? `Hay una nueva participación para ${chosenNumbers}. Ingresa al panel para revisar evidencia y resolver.`
+            : "Hay una nueva participación pendiente de revisión en sorteos.",
+          ctaLabel: "Abrir panel admin",
+          ctaHref: linkOverride ?? fallbackLink ?? "/admin/sorteos"
+        }
+      };
+      break;
+    case "RAFFLE_ENTRY_CONFIRMED":
+    case "RAFFLE_ENTRY_ASSIGNED":
+      base = {
+        title: "Números asignados oficialmente",
+        message: chosenNumber
+          ? `Tu número #${chosenNumber} ya fue asignado oficialmente.`
+          : chosenNumbers
+            ? `Tus números ${chosenNumbers} ya fueron asignados oficialmente.`
+            : "Tu participación en el sorteo fue asignada oficialmente.",
+        link: linkOverride ?? fallbackLink ?? "/portal",
+        kind: "raffle",
+        audience: "transactional",
+        email: {
+          subject: "Pago verificado: números asignados",
           preheader: "Todo listo: tu entrada quedó validada.",
-          heading: "Participación confirmada",
+          heading: "Participación validada",
           body: chosenNumber
-            ? `Confirmamos tu entrada con el número #${chosenNumber}. Puedes revisar tu estado en tu portal.`
-            : "Confirmamos tu entrada en el sorteo. Puedes revisar tu estado en tu portal.",
+            ? `Verificamos tu pago y asignamos oficialmente el número #${chosenNumber}.`
+            : chosenNumbers
+              ? `Verificamos tu pago y asignamos oficialmente ${chosenNumbers}.`
+              : "Verificamos tu pago y la participación quedó asignada.",
           ctaLabel: "Ver mi participación",
           ctaHref: linkOverride ?? fallbackLink ?? "/portal"
+        }
+      };
+      break;
+    case "RAFFLE_ENTRY_REJECTED":
+      base = {
+        title: "Pago no validado",
+        message: chosenNumbers
+          ? `No pudimos validar el pago para ${chosenNumbers}. Los números fueron liberados.`
+          : "No pudimos validar tu pago. La reserva de números fue liberada.",
+        link: linkOverride ?? fallbackLink ?? "/sorteos",
+        kind: "raffle",
+        audience: "transactional",
+        email: {
+          subject: "Pago no validado",
+          preheader: "Tu reserva fue liberada y puedes volver a participar.",
+          heading: "No pudimos validar tu pago",
+          body: chosenNumbers
+            ? `No fue posible validar el pago para ${chosenNumbers}. Puedes volver a participar seleccionando números disponibles.`
+            : "No fue posible validar tu pago. Puedes volver a participar seleccionando números disponibles.",
+          ctaLabel: "Participar nuevamente",
+          ctaHref: linkOverride ?? fallbackLink ?? "/sorteos"
+        }
+      };
+      break;
+    case "RAFFLE_ENTRY_EXPIRING":
+      base = {
+        title: "Reserva por expirar",
+        message: chosenNumbers
+          ? `Tu reserva ${chosenNumbers} está por expirar. Completa el pago para conservarla.`
+          : "Tu reserva está por expirar. Completa el pago para conservarla.",
+        link: linkOverride ?? fallbackLink ?? "/sorteos",
+        kind: "raffle",
+        audience: "transactional",
+        email: {
+          subject: "Tu reserva de números está por expirar",
+          preheader: "Completa tu pago para conservar tus números.",
+          heading: "Reserva por expirar",
+          body: chosenNumbers
+            ? `Tu reserva para ${chosenNumbers} está por expirar. ${reservationExpirationText}`
+            : `Tu reserva está por expirar. ${reservationExpirationText}`,
+          ctaLabel: "Completar participación",
+          ctaHref: linkOverride ?? fallbackLink ?? "/sorteos"
+        }
+      };
+      break;
+    case "RAFFLE_ENTRY_EXPIRED":
+      base = {
+        title: "Reserva expirada",
+        message: chosenNumbers
+          ? `La reserva ${chosenNumbers} expiró y los números ya están disponibles nuevamente.`
+          : "Tu reserva expiró y los números fueron liberados.",
+        link: linkOverride ?? fallbackLink ?? "/sorteos",
+        kind: "raffle",
+        audience: "transactional",
+        email: {
+          subject: "Tu reserva expiró",
+          preheader: "Puedes volver a participar con números disponibles.",
+          heading: "Reserva expirada",
+          body: chosenNumbers
+            ? `La reserva para ${chosenNumbers} expiró por tiempo. Puedes volver a participar cuando quieras.`
+            : "Tu reserva expiró por tiempo. Puedes volver a participar cuando quieras.",
+          ctaLabel: "Ver sorteo",
+          ctaHref: linkOverride ?? fallbackLink ?? "/sorteos"
         }
       };
       break;

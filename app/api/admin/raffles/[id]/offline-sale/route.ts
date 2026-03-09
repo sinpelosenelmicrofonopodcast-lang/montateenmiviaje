@@ -21,7 +21,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await requireAdminServerAccess();
+  const auth = await requireAdminServerAccess();
   try {
     const { id } = await params;
     const payload = schema.parse(await request.json());
@@ -38,7 +38,8 @@ export async function POST(
       amount: payload.amount,
       paymentReference: payload.paymentReference,
       note: payload.note,
-      markAsConfirmed: payload.markAsConfirmed
+      markAsConfirmed: payload.markAsConfirmed,
+      actorId: auth.user?.id
     });
 
     return NextResponse.json(result);

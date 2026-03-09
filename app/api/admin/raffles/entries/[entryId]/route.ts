@@ -4,7 +4,9 @@ import { requireAdminServerAccess } from "@/lib/admin-guard";
 import { updateRaffleEntryStatusService } from "@/lib/raffles-service";
 
 const schema = z.object({
-  status: z.enum(["pending_payment", "pending_review", "confirmed", "rejected", "cancelled"])
+  status: z.enum(["pending_payment", "pending_review", "approved", "assigned", "confirmed", "rejected", "expired", "cancelled"]),
+  reason: z.string().max(240).optional(),
+  verificationNotes: z.string().max(500).optional()
 });
 
 export async function PATCH(
@@ -15,7 +17,11 @@ export async function PATCH(
   try {
     const { entryId } = await params;
     const payload = schema.parse(await request.json());
-    const entry = await updateRaffleEntryStatusService(entryId, payload.status, auth.user?.id);
+    const entry = await updateRaffleEntryStatusService(entryId, payload.status, {
+      actorId: auth.user?.id,
+      reason: payload.reason,
+      verificationNotes: payload.verificationNotes
+    });
 
     if (!entry) {
       return NextResponse.json({ message: "Entrada no encontrada" }, { status: 404 });

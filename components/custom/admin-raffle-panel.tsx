@@ -203,6 +203,7 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
   const [selectedNumbers, setSelectedNumbers] = useState<number[]>([]);
   const [numberStatusFilter, setNumberStatusFilter] = useState<string>("all");
   const [numberSearch, setNumberSearch] = useState("");
+  const [entryStatusFilter, setEntryStatusFilter] = useState<string>("all");
   const [bulkAction, setBulkAction] = useState<"block" | "unblock" | "reserve" | "mark_sold" | "cancel">("block");
   const [bulkNote, setBulkNote] = useState("");
   const [bulkReason, setBulkReason] = useState("");
@@ -270,6 +271,23 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
       return statusOk && searchOk;
     });
   }, [numberSearch, numberStatusFilter, snapshot]);
+
+  const filteredSnapshotEntries = useMemo(() => {
+    if (!snapshot) {
+      return [] as RaffleEntry[];
+    }
+    if (entryStatusFilter === "all") {
+      return snapshot.entries;
+    }
+    return snapshot.entries.filter((entry) => entry.status === entryStatusFilter);
+  }, [entryStatusFilter, snapshot]);
+
+  const filteredGlobalEntries = useMemo(() => {
+    if (entryStatusFilter === "all") {
+      return entries;
+    }
+    return entries.filter((entry) => entry.status === entryStatusFilter);
+  }, [entries, entryStatusFilter]);
 
   function resetForm() {
     setForm({
@@ -573,10 +591,20 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
   async function updateEntry(entryId: string, nextStatus: RaffleEntry["status"]) {
     setFeedback(null);
     setError(null);
+
+    let reason: string | undefined;
+    if (nextStatus === "rejected") {
+      reason = window.prompt("Motivo de rechazo (opcional):", "pago_no_recibido") ?? undefined;
+    } else if (nextStatus === "cancelled") {
+      reason = window.prompt("Motivo de liberación/cancelación (opcional):", "liberado_por_admin") ?? undefined;
+    } else if (nextStatus === "expired") {
+      reason = "tiempo_expirado";
+    }
+
     const response = await fetch(`/api/admin/raffles/entries/${entryId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: nextStatus })
+      body: JSON.stringify({ status: nextStatus, reason })
     });
 
     if (response.ok) {
@@ -793,6 +821,28 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
     await refreshBase();
     await refreshSnapshot();
     setFeedback("Pago manual actualizado.");
+  }
+
+  async function expireReservationsNow() {
+    setFeedback(null);
+    setError(null);
+
+    const response = await fetch("/api/admin/raffles/expire-reservations", { method: "POST" });
+    const payload = (await response.json()) as {
+      message?: string;
+      result?: { expiredEntries?: number; affectedNumbers?: number; expiringReminderSent?: number };
+    };
+
+    if (!response.ok) {
+      setError(payload.message ?? "No se pudo ejecutar expiración automática.");
+      return;
+    }
+
+    await refreshBase();
+    await refreshSnapshot();
+    setFeedback(
+      `Expiración ejecutada. Expiradas: ${payload.result?.expiredEntries ?? 0}, recordatorios: ${payload.result?.expiringReminderSent ?? 0}.`
+    );
   }
 
   async function saveVisibilitySettings() {
@@ -1136,7 +1186,7 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
               <article className="admin-card"><p className="kpi-title">Vendidos</p><p className="kpi-value">{snapshot.metrics.sold + snapshot.metrics.winners}</p></article>
               <article className="admin-card"><p className="kpi-title">Reservados</p><p className="kpi-value">{snapshot.metrics.reserved + snapshot.metrics.pendingManualReview}</p></article>
               <article className="admin-card"><p className="kpi-title">Bloqueados</p><p className="kpi-value">{snapshot.metrics.blocked}</p></article>
-              <article className="admin-card"><p className="kpi-title">Participaciones confirmadas</p><p className="kpi-value">{snapshot.metrics.confirmedEntries}</p></article>
+              <article className="admin-card"><p className="kpi-title">Participaciones asignadas</p><p className="kpi-value">{snapshot.metrics.confirmedEntries}</p></article>
               <article className="admin-card"><p className="kpi-title">Entradas offline</p><p className="kpi-value">{snapshot.metrics.offlineEntries}</p></article>
             </div>
           ) : null}
@@ -1222,31 +1272,59 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
           ) : null}
 
           {snapshot && activeTab === "entries" ? (
+            <>
+            <div className="request-grid">
+              <label>
+                Filtro estado
+                <select value={entryStatusFilter} onChange={(event) => setEntryStatusFilter(event.target.value)}>
+                  <option value="all">all</option>
+                  <option value="pending_payment">pending_payment</option>
+                  <option value="pending_review">pending_review</option>
+                  <option value="approved">approved</option>
+                  <option value="assigned">assigned</option>
+                  <option value="confirmed">confirmed (legacy)</option>
+                  <option value="rejected">rejected</option>
+                  <option value="expired">expired</option>
+                  <option value="cancelled">cancelled</option>
+                </select>
+              </label>
+              <label>
+                Acciones
+                <button className="button-outline" type="button" onClick={() => void expireReservationsNow()}>
+                  Ejecutar expiración automática
+                </button>
+              </label>
+            </div>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>Correo</th>
+                    <th>Teléfono</th>
                     <th>Número</th>
                     <th>Source</th>
                     <th>Pago</th>
+                    <th>Expira</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {snapshot.entries.map((entry) => (
+                  {filteredSnapshotEntries.map((entry) => (
                     <tr key={entry.id}>
                       <td>{entry.customerEmail}</td>
+                      <td>{entry.phone ?? "-"}</td>
                       <td>#{entry.chosenNumber}</td>
                       <td>{entry.source ?? "online"}</td>
                       <td>{entry.paymentMethod ?? "-"}</td>
+                      <td>{entry.reservationExpiresAt ? new Date(entry.reservationExpiresAt).toLocaleString("es-PR") : "-"}</td>
                       <td>{entry.status}</td>
                       <td>
                         <div className="button-row">
-                          <button className="button-outline" type="button" onClick={() => void updateEntry(entry.id, "confirmed")}>Confirmar</button>
+                          <button className="button-outline" type="button" onClick={() => void updateEntry(entry.id, "assigned")}>Aprobar</button>
                           <button className="button-outline" type="button" onClick={() => void updateEntry(entry.id, "rejected")}>Rechazar</button>
-                          <button className="button-outline" type="button" onClick={() => void updateEntry(entry.id, "cancelled")}>Cancelar</button>
+                          <button className="button-outline" type="button" onClick={() => void updateEntry(entry.id, "expired")}>Expirar</button>
+                          <button className="button-outline" type="button" onClick={() => void updateEntry(entry.id, "cancelled")}>Liberar</button>
                         </div>
                       </td>
                     </tr>
@@ -1254,6 +1332,7 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
                 </tbody>
               </table>
             </div>
+            </>
           ) : null}
 
           {snapshot && activeTab === "payments" ? (
@@ -1311,7 +1390,7 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
                   </label>
                   <label>
                     <input type="checkbox" checked={offlineSale.markAsConfirmed} onChange={(event) => setOfflineSale({ ...offlineSale, markAsConfirmed: event.target.checked })} />
-                    Marcar como confirmado
+                    Marcar como asignado
                   </label>
                 </div>
                 <button className="button-dark" type="submit">Registrar venta offline</button>
@@ -1755,6 +1834,22 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
 
       <section className="card section">
         <h3>Participaciones globales</h3>
+        <div className="request-grid">
+          <label>
+            Filtro estado
+            <select value={entryStatusFilter} onChange={(event) => setEntryStatusFilter(event.target.value)}>
+              <option value="all">all</option>
+              <option value="pending_payment">pending_payment</option>
+              <option value="pending_review">pending_review</option>
+              <option value="approved">approved</option>
+              <option value="assigned">assigned</option>
+              <option value="confirmed">confirmed (legacy)</option>
+              <option value="rejected">rejected</option>
+              <option value="expired">expired</option>
+              <option value="cancelled">cancelled</option>
+            </select>
+          </label>
+        </div>
         <div className="table-wrap">
           <table>
             <thead>
@@ -1767,7 +1862,7 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry) => (
+              {filteredGlobalEntries.map((entry) => (
                 <tr key={entry.id}>
                   <td>{raffleTitleMap.get(entry.raffleId) ?? entry.raffleId.slice(0, 8)}</td>
                   <td>{entry.customerEmail}</td>
@@ -1775,9 +1870,10 @@ export function AdminRafflePanel({ initialRaffles, initialEntries }: AdminRaffle
                   <td>{entry.status}</td>
                   <td>
                     <div className="button-row">
-                      <button className="button-outline" type="button" onClick={() => void updateEntry(entry.id, "confirmed")}>Confirmar</button>
+                      <button className="button-outline" type="button" onClick={() => void updateEntry(entry.id, "assigned")}>Aprobar</button>
                       <button className="button-outline" type="button" onClick={() => void updateEntry(entry.id, "rejected")}>Rechazar</button>
-                      <button className="button-outline" type="button" onClick={() => void updateEntry(entry.id, "cancelled")}>Cancelar</button>
+                      <button className="button-outline" type="button" onClick={() => void updateEntry(entry.id, "expired")}>Expirar</button>
+                      <button className="button-outline" type="button" onClick={() => void updateEntry(entry.id, "cancelled")}>Liberar</button>
                     </div>
                   </td>
                 </tr>

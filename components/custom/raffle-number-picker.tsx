@@ -1,26 +1,46 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { RaffleNumberStatus } from "@/lib/types";
 import styles from "./raffle-number-picker.module.css";
 
 interface RaffleNumberPickerProps {
   availableNumbers: number[];
+  numberStates?: Array<{ number: number; status: RaffleNumberStatus }>;
   selectedNumbers: number[];
   onSelectedNumbersChange: (numbers: number[]) => void;
 }
 
+const statusLabel: Record<RaffleNumberStatus, string> = {
+  available: "Disponible",
+  reserved: "Reservado",
+  pending_manual_review: "Pendiente",
+  sold: "Vendido",
+  winner: "Ganador",
+  blocked: "Bloqueado",
+  cancelled: "No disponible"
+};
+
 export function RaffleNumberPicker({
   availableNumbers,
+  numberStates,
   selectedNumbers,
   onSelectedNumbersChange
 }: RaffleNumberPickerProps) {
   const [query, setQuery] = useState("");
 
+  const fullStateList = useMemo(() => {
+    if (numberStates && numberStates.length > 0) {
+      return [...numberStates].sort((a, b) => a.number - b.number);
+    }
+    return availableNumbers.map((number) => ({ number, status: "available" as RaffleNumberStatus }));
+  }, [availableNumbers, numberStates]);
+
   const filteredNumbers = useMemo(() => {
     const normalized = query.trim();
-    if (!normalized) return availableNumbers;
-    return availableNumbers.filter((number) => String(number).includes(normalized));
-  }, [availableNumbers, query]);
+    if (!normalized) return fullStateList;
+    return fullStateList.filter((item) => String(item.number).includes(normalized));
+  }, [fullStateList, query]);
 
   const selectedLabel = useMemo(() => {
     if (selectedNumbers.length === 0) return "";
@@ -70,20 +90,30 @@ export function RaffleNumberPicker({
         </div>
 
         <div className={styles.grid}>
-          {filteredNumbers.length > 0 ? filteredNumbers.slice(0, 300).map((number) => (
+          {filteredNumbers.length > 0 ? filteredNumbers.slice(0, 300).map((item) => (
             <button
-              key={number}
+              key={item.number}
               type="button"
-              className={`${styles.tile} ${selectedNumbers.includes(number) ? styles.tileActive : ""}`}
+              className={`${styles.tile} ${selectedNumbers.includes(item.number) ? styles.tileActive : ""} ${
+                item.status !== "available" ? styles.tileUnavailable : ""
+              }`}
               onClick={() => {
-                if (selectedNumbers.includes(number)) {
-                  onSelectedNumbersChange(selectedNumbers.filter((value) => value !== number));
+                if (item.status !== "available") {
                   return;
                 }
-                onSelectedNumbersChange([...selectedNumbers, number]);
+                if (selectedNumbers.includes(item.number)) {
+                  onSelectedNumbersChange(selectedNumbers.filter((value) => value !== item.number));
+                  return;
+                }
+                onSelectedNumbersChange([...selectedNumbers, item.number]);
               }}
+              disabled={item.status !== "available"}
+              title={statusLabel[item.status]}
             >
-              #{number}
+              <span>#{item.number}</span>
+              {item.status !== "available" ? (
+                <small className={styles.tileStatus}>{statusLabel[item.status]}</small>
+              ) : null}
             </button>
           )) : (
             <p className={styles.empty}>No hay resultados con ese filtro.</p>
@@ -95,6 +125,10 @@ export function RaffleNumberPicker({
             Seleccionados ({selectedNumbers.length}): <strong>{selectedLabel}</strong>
           </p>
         ) : null}
+
+        <p className={styles.legend}>
+          Números en estado <strong>reservado</strong>, <strong>pendiente</strong>, <strong>vendido</strong> o <strong>bloqueado</strong> no pueden seleccionarse.
+        </p>
       </div>
     </section>
   );

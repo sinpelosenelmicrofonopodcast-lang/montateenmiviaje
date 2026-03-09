@@ -136,6 +136,7 @@ export default async function SorteoDetailPage({ params }: SorteoDetailPageProps
             paymentLinks={activePaymentMethodsWithLink}
             paymentNote={raffle.paymentLinksNote ?? paymentConfig.note}
             initialAvailableNumbers={availableNumbers}
+            numberStates={summary.numbers.map((item) => ({ number: item.number, status: item.status }))}
             prefilledEmail={auth.email ?? undefined}
             isAuthenticated={Boolean(auth.user)}
           />

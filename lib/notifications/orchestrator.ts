@@ -143,7 +143,7 @@ async function resolveRecipients(input: DispatchNotificationInput): Promise<Noti
         if (!row.email) return false;
         if (source.audience === "users") {
           const role = (row.role ?? "user").toLowerCase();
-          if (["super_admin", "admin", "manager", "moderator", "travel_agent"].includes(role)) {
+          if (["owner", "super_admin", "admin", "manager", "moderator", "travel_agent"].includes(role)) {
             return false;
           }
         }

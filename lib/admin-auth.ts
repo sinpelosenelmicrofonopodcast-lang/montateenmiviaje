@@ -1,11 +1,11 @@
 import type { User } from "@supabase/supabase-js";
 
-export type AppRole = "super_admin" | "admin" | "manager" | "moderator" | "travel_agent" | "user";
+export type AppRole = "owner" | "super_admin" | "admin" | "manager" | "moderator" | "travel_agent" | "user";
 
 const FALLBACK_ROLE: AppRole = "user";
-const VALID_ROLES = new Set<AppRole>(["super_admin", "admin", "manager", "moderator", "travel_agent", "user"]);
-const ADMIN_ROLES = new Set<AppRole>(["super_admin", "admin"]);
-const TRAVEL_DESK_ROLES = new Set<AppRole>(["super_admin", "admin", "moderator", "travel_agent", "manager"]);
+const VALID_ROLES = new Set<AppRole>(["owner", "super_admin", "admin", "manager", "moderator", "travel_agent", "user"]);
+const ADMIN_ROLES = new Set<AppRole>(["owner", "super_admin", "admin"]);
+const TRAVEL_DESK_ROLES = new Set<AppRole>(["owner", "super_admin", "admin", "moderator", "travel_agent", "manager"]);
 
 export function normalizeRole(role: string | null | undefined): AppRole {
   if (!role) {

@@ -407,7 +407,16 @@ export type RaffleParticipantsMode = "hidden" | "name_only" | "name_number" | "m
 export type RaffleNumberGridMode = "full" | "available_only" | "sold_only" | "totals_only";
 export type RaffleVerificationMode = "none" | "commit_reveal";
 export type RaffleDrawAlgorithm = "sha256-modulo-v1";
-export type RaffleEntryStatus = "pending_payment" | "pending_review" | "confirmed" | "rejected" | "cancelled";
+export type RaffleEntryStatus =
+  | "draft"
+  | "pending_payment"
+  | "pending_review"
+  | "approved"
+  | "assigned"
+  | "confirmed"
+  | "rejected"
+  | "expired"
+  | "cancelled";
 export type RaffleNumberStatus =
   | "available"
   | "blocked"
@@ -523,6 +532,16 @@ export interface RaffleEntry {
   phone?: string;
   referralCode?: string;
   referredByCode?: string;
+  reservationExpiresAt?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  paymentVerifiedAt?: string;
+  verificationNotes?: string;
+  rejectionReason?: string;
+  releasedAt?: string;
+  releasedReason?: string;
+  releasedBy?: string;
+  expiryReminderSentAt?: string;
   updatedAt?: string;
   createdAt: string;
 }
