@@ -60,6 +60,7 @@ Copia `.env.example` a `.env.local` y completa:
    - `supabase/migrations/006_portal_auth_link.sql`
    - `supabase/migrations/007_profiles_sync_and_phone.sql`
    - `supabase/migrations/011_growth_profiles_referrals_onboarding.sql`
+   - `supabase/migrations/202603092130_raffle_paypal_rpc_hotfix.sql`
 3. Configura en Vercel/local:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`

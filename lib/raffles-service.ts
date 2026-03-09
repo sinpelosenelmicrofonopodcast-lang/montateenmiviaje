@@ -2441,7 +2441,7 @@ export async function reserveRaffleNumbersForPaypalService(
 
   if (rpc.error) {
     if ((rpc.error.code ?? "").toUpperCase() === "PGRST202") {
-      throw new Error("Falta migración de PayPal para rifas. Ejecuta las migraciones pendientes.");
+      throw new Error("Falta migración de PayPal para rifas (RPC). Ejecuta la migración 202603092130_raffle_paypal_rpc_hotfix.sql.");
     }
     throw new Error(rpc.error.message || "No se pudieron reservar los números seleccionados");
   }
