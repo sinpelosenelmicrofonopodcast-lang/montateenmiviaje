@@ -95,18 +95,18 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
             </p>
             <div className="availability-row">
               <span>
-                Cupos disponibles: {trip.availableSpots}/{trip.totalSpots}
+                {trip.totalSpots > 0 ? `Cupos disponibles: ${trip.availableSpots}/${trip.totalSpots}` : "Cupos por anunciar"}
               </span>
               <div className="availability-track" aria-hidden>
                 <div className="availability-fill" style={{ width: `${availability}%` }} />
               </div>
             </div>
-            {trip.packages.length > 0 ? (
+            {trip.packages.length > 0 && trip.startDate && trip.endDate && trip.availableSpots > 0 ? (
               <Link href={`/reservar/${trip.slug}`} className="button-primary" style={{ marginTop: "16px" }}>
                 Reservar con PayPal
               </Link>
             ) : (
-              <p className="muted">Este viaje aún no tiene paquetes configurados.</p>
+              <p className="muted">Próximamente anunciaremos los detalles. Las reservas y los pagos todavía no están disponibles.</p>
             )}
             <a
               href={`/api/pdf/trip/${trip.slug}?audience=client&lang=es&showPrices=true`}
