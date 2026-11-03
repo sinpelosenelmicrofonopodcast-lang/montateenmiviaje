@@ -32,7 +32,7 @@ export function TripCard({ trip }: TripCardProps) {
         <p>{trip.destination}</p>
         <p>{formatDateRange(trip.startDate, trip.endDate)}</p>
         <div className="availability-row">
-          <span>{trip.availableSpots} cupos</span>
+          <span>{trip.totalSpots > 0 ? `${trip.availableSpots} cupos` : "Cupos por anunciar"}</span>
           <div className="availability-track" aria-hidden>
             <div className="availability-fill" style={{ width: `${availability}%` }} />
           </div>
