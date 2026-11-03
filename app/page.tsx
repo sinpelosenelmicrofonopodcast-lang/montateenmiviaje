@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { listTripsService } from "@/lib/catalog-service";
+import { hgmGoogleReady, listGoogleTrips } from "@/lib/hgm-google";
 import { formatMoney, getStartingPrice } from "@/lib/format";
 import { toPublicImageSrc } from "@/lib/image-url";
 import styles from "./travel-home.module.css";
@@ -20,7 +21,8 @@ const guides = [
 ];
 
 export default async function HomePage() {
-  const trips = await listTripsService({ publishedOnly: true }).catch((error) => {
+  const useGoogle = process.env.HGM_GOOGLE_CATALOG_ENABLED === "true" && hgmGoogleReady();
+  const trips = await (useGoogle ? listGoogleTrips({ publishedOnly: true }) : listTripsService({ publishedOnly: true })).catch((error) => {
     console.error("Home: unavailable trip catalog", error);
     return [];
   });
