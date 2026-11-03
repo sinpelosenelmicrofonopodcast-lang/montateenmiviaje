@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createGoogleQuote, hgmGoogleReady } from "@/lib/hgm-google";
 import { z } from "zod";
 import { markOnboardingStepService } from "@/lib/growth-service";
 import { createCustomTripRequestService, listCustomTripRequestsService } from "@/lib/runtime-service";
@@ -24,6 +25,10 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const payload = createSchema.parse(await request.json());
+    if (process.env.HGM_GOOGLE_QUOTES_ENABLED === "true" && hgmGoogleReady()) {
+      const requestId = await createGoogleQuote(payload);
+      return NextResponse.json({ requestId, status: "submitted", packagePageUrl: `/solicitud/${requestId}` });
+    }
     const customRequest = await createCustomTripRequestService(payload);
 
     try {
