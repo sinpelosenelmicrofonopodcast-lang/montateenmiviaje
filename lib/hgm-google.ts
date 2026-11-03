@@ -26,7 +26,27 @@ function config() {
 }
 
 export function hgmGoogleReady() {
-  return Boolean(process.env.HGM_GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.HGM_GOOGLE_PRIVATE_KEY);
+  return Boolean((process.env.HGM_GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.HGM_GOOGLE_PRIVATE_KEY) ||
+    (process.env.HGM_GOOGLE_APPS_SCRIPT_URL && process.env.HGM_GOOGLE_API_TOKEN));
+}
+
+function useScriptBridge() {
+  return !process.env.HGM_GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.HGM_GOOGLE_PRIVATE_KEY;
+}
+
+async function bridge<T>(action: string, input: Record<string, unknown> = {}): Promise<T> {
+  const endpoint = new URL(process.env.HGM_GOOGLE_APPS_SCRIPT_URL || "https://invalid.local");
+  if (endpoint.protocol !== "https:" || endpoint.hostname !== "script.google.com" ||
+      !/^\/macros\/s\/[^/]+\/exec$/.test(endpoint.pathname)) throw new Error("HGM_GOOGLE_INVALID_ENDPOINT");
+  const response = await fetch(endpoint, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...input, action, token: process.env.HGM_GOOGLE_API_TOKEN }),
+    cache: "no-store", signal: AbortSignal.timeout(25000)
+  });
+  if (!response.ok) throw new Error(`HGM_GOOGLE_BRIDGE_HTTP_${response.status}`);
+  const result = await response.json();
+  if (result.ok !== true) throw new Error("HGM_GOOGLE_BRIDGE_REJECTED");
+  return result as T;
 }
 
 function b64url(data: string) {
@@ -84,6 +104,12 @@ async function sheetsRequest<T>(range: string, append?: GoogleCell[]): Promise<T
 }
 
 async function rows(tab: "VIAJES" | "PAQUETES" | "BLOG") {
+  if (useScriptBridge()) {
+    const action = { VIAJES: "listTrips", PAQUETES: "listPackages", BLOG: "listPosts" }[tab];
+    const result = await bridge<{ rows: Record<string, GoogleCell>[] }>(action);
+    if (!Array.isArray(result.rows)) throw new Error("HGM_GOOGLE_SCHEMA_MISMATCH");
+    return result.rows.map(row => Object.fromEntries(Object.entries(row).map(([key, value]) => [key, value ?? ""])));
+  }
   const result = await sheetsRequest<SheetsValues>(`'${tab}'!A1:Z5000`);
   const [heading, ...data] = result.values || [];
   if (!heading?.length) throw new Error(`HGM_GOOGLE_EMPTY_HEADER_${tab}`);
@@ -149,6 +175,14 @@ export async function createGoogleQuote(input: QuoteInput) {
   const motive = required(input.motive, 300);
   const expectations = required(input.expectations, 4000);
   const id = randomUUID(), now = new Date().toISOString();
+  if (useScriptBridge()) {
+    const result = await bridge<{ requestId: string }>("createQuote", { quote: {
+      ...input, customerName: name, customerEmail: email, destination,
+      startDate: start, endDate: end, motive, expectations
+    } });
+    if (!result.requestId) throw new Error("HGM_GOOGLE_SCHEMA_MISMATCH");
+    return result.requestId;
+  }
   await sheetsRequest<unknown>("'COTIZACIONES'!A:N", [
     id, now, name, email, destination, start, end, input.travelers,
     input.budget, motive, expectations, "submitted", "", now
@@ -157,6 +191,10 @@ export async function createGoogleQuote(input: QuoteInput) {
 }
 
 export async function googleHealth() {
+  if (useScriptBridge()) {
+    await Promise.all([rows("VIAJES"), rows("PAQUETES")]);
+    return { ok: true, provider: "google-apps-script", sheet: "VIAJES" };
+  }
   const r = await sheetsRequest<SheetsValues>("'VIAJES'!A1:B1");
   if (r.values?.[0]?.[0] !== "trip_id") throw new Error("HGM_GOOGLE_SCHEMA_MISMATCH");
   return { ok: true, provider: "google-sheets-api", sheet: "VIAJES" };
