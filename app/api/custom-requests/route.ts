@@ -4,6 +4,8 @@ import { z } from "zod";
 import { markOnboardingStepService } from "@/lib/growth-service";
 import { createCustomTripRequestService, listCustomTripRequestsService } from "@/lib/runtime-service";
 import { getSupabaseServerClient } from "@/lib/supabase-server";
+import { getServerAuthContext } from "@/lib/admin-guard";
+import { hasTravelDeskRole, isAdminRole } from "@/lib/admin-auth";
 
 const createSchema = z.object({
   customerName: z.string().min(2),
@@ -18,6 +20,10 @@ const createSchema = z.object({
 });
 
 export async function GET() {
+  const auth = await getServerAuthContext();
+  if (!auth.user || !(isAdminRole(auth.role) || hasTravelDeskRole(auth.role))) {
+    return NextResponse.json({ message: "No autorizado" }, { status: 403 });
+  }
   const requests = await listCustomTripRequestsService();
   return NextResponse.json({ requests });
 }
