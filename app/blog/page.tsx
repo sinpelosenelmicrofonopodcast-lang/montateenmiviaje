@@ -1,0 +1,5 @@
+import Link from "next/link";
+import type { Metadata } from "next";
+import { blogPosts } from "./blog-data";
+export const metadata: Metadata = {title:"Blog de viajes | Móntate en Mi Viaje",description:"Guías de viajes grupales, ideas para organizar escapadas con amigos y consejos antes de reservar."};
+export default function BlogPage(){return <main className="container section"><header className="travel-blog-hero"><span>EL BLOG DE MÓNTATE EN MI VIAJE</span><h1>Ideas para tu próxima aventura.</h1><p>Inspiración y consejos prácticos para viajar en grupo, organizar experiencias privadas y disfrutar cada destino.</p></header><section className="travel-blog-grid">{blogPosts.map(post=><Link className="travel-blog-tile" href={`/blog/${post.slug}`} key={post.slug}><img src={post.image} alt="" loading="lazy"/><div><small>{post.tag}</small><h2>{post.title}</h2><p>{post.excerpt}</p><strong>Leer artículo ↗</strong></div></Link>)}</section><div className="travel-blog-cta"><h2>¿Ya tienes una idea de viaje?</h2><p>Cuéntanos y preparemos una propuesta para tu grupo.</p><Link className="button-dark" href="/cotizacion">Solicitar cotización</Link></div></main>}
