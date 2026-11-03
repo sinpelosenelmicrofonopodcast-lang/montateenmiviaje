@@ -26,7 +26,7 @@ export default async function HomePage() {
     console.error("Home: unavailable trip catalog", error);
     return [];
   });
-  const featured = trips.filter((trip) => trip.availableSpots > 0).slice(0, 3);
+  const featured = trips.filter((trip) => trip.featured || trip.availableSpots > 0 || !trip.startDate).slice(0, 3);
 
   return (
     <main className={styles.page}>
@@ -59,7 +59,7 @@ export default async function HomePage() {
             const price = getStartingPrice(trip.packages, trip.priceFrom);
             return <Link href={`/viajes/${trip.slug}`} className={styles.tripCard} key={trip.id}>
               <div className={styles.tripPhoto}><img src={toPublicImageSrc(trip.heroImage)} alt={trip.destination} loading="lazy" /><span className={styles.tripLabel}>{trip.category}</span></div>
-              <div className={styles.tripBody}><span className={styles.tripDestination}>{trip.destination}</span><h3>{trip.title}</h3><p>{trip.summary}</p><div className={styles.tripMeta}><span>{trip.availableSpots} espacios disponibles</span><strong>{price ? `Desde ${formatMoney(price)}` : "Consultar precio"}</strong></div><span className={styles.cardLink}>Conoce esta experiencia →</span></div>
+              <div className={styles.tripBody}><span className={styles.tripDestination}>{trip.destination}</span><h3>{trip.title}</h3><p>{trip.summary}</p><div className={styles.tripMeta}><span>{trip.totalSpots > 0 ? `${trip.availableSpots} espacios disponibles` : "Detalles por anunciar"}</span><strong>{price ? `Desde ${formatMoney(price)}` : "Precio por anunciar"}</strong></div><span className={styles.cardLink}>Conoce esta experiencia →</span></div>
             </Link>;
           })}</div>
         ) : (
