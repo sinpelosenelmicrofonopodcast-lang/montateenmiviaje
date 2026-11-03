@@ -95,6 +95,8 @@ export default async function HomePage() {
         <div className={styles.blogGrid}>{guides.map((guide)=><Link href={guide.href} className={styles.blogCard} key={guide.href}><img src={guide.image} alt="" loading="lazy" /><span>{guide.category}</span><h3>{guide.title}</h3><b>Leer artículo →</b></Link>)}</div>
       </section>
 
+      <section className={styles.facebookSection}><div><span className={styles.kicker}>SIGUE NUESTRA COMUNIDAD</span><h2>La aventura también se comparte <em>fuera del viaje.</em></h2><p>Conoce nuestras novedades, anuncios y publicaciones directamente en nuestra página de Facebook.</p><a href="https://www.facebook.com/profile.php?id=61578995492557" target="_blank" rel="noopener noreferrer" className={styles.darkButton}>Visita nuestro Facebook ↗</a></div><div className={styles.facebookVisual}><span>CONÉCTATE CON NOSOTROS</span><strong>Móntate en Mi Viaje</strong><p>La comunidad de viajeros sigue creciendo.</p></div></section>
+
       <section className={styles.finalCta}><span className={styles.kicker}>EL PRÓXIMO CAPÍTULO TE ESPERA</span><h2>Los mejores recuerdos no esperan. <em>¿Te montas?</em></h2><div><Link href="/viajes" className={styles.primaryButton}>Ver próximos viajes ↗</Link><Link href="/organizar-viaje" className={styles.outlineButton}>Planificar un grupo</Link></div></section>
     </main>
   );
