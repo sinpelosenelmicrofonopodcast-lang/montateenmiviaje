@@ -30,7 +30,7 @@ export function hgmGoogleReady() {
     (process.env.HGM_GOOGLE_APPS_SCRIPT_URL && process.env.HGM_GOOGLE_API_TOKEN));
 }
 
-function useScriptBridge() {
+function shouldUseScriptBridge() {
   return !process.env.HGM_GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.HGM_GOOGLE_PRIVATE_KEY;
 }
 
@@ -104,7 +104,7 @@ async function sheetsRequest<T>(range: string, append?: GoogleCell[]): Promise<T
 }
 
 async function rows(tab: "VIAJES" | "PAQUETES" | "BLOG") {
-  if (useScriptBridge()) {
+  if (shouldUseScriptBridge()) {
     const action = { VIAJES: "listTrips", PAQUETES: "listPackages", BLOG: "listPosts" }[tab];
     const result = await bridge<{ rows: Record<string, GoogleCell>[] }>(action);
     if (!Array.isArray(result.rows)) throw new Error("HGM_GOOGLE_SCHEMA_MISMATCH");
@@ -175,7 +175,7 @@ export async function createGoogleQuote(input: QuoteInput) {
   const motive = required(input.motive, 300);
   const expectations = required(input.expectations, 4000);
   const id = randomUUID(), now = new Date().toISOString();
-  if (useScriptBridge()) {
+  if (shouldUseScriptBridge()) {
     const result = await bridge<{ requestId: string }>("createQuote", { quote: {
       ...input, customerName: name, customerEmail: email, destination,
       startDate: start, endDate: end, motive, expectations
@@ -191,7 +191,7 @@ export async function createGoogleQuote(input: QuoteInput) {
 }
 
 export async function googleHealth() {
-  if (useScriptBridge()) {
+  if (shouldUseScriptBridge()) {
     await Promise.all([rows("VIAJES"), rows("PAQUETES")]);
     return { ok: true, provider: "google-apps-script", sheet: "VIAJES" };
   }
