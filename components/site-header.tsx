@@ -8,18 +8,18 @@ import { getUnreadNotificationCountService } from "@/lib/notifications/service";
 import { HeaderLogoutButton } from "@/components/header-logout-button";
 
 const primaryLinks = [
-  { href: "/viajes", label: "Viajes" },
-  { href: "/ofertas", label: "Ofertas" },
-  { href: "/sorteos", label: "Sorteos" },
-  { href: "/solicitar-viaje", label: "Solicitar viaje" },
-  { href: "/testimonios", label: "Testimonios" },
-  { href: "/galeria", label: "Galeria" },
+  { href: "/viajes", label: "Próximos viajes" },
+  { href: "/organizar-viaje", label: "Organiza un grupo" },
+  { href: "/cotizacion", label: "Cotizaciones" },
+  { href: "/blog", label: "Blog" },
+  { href: "/about", label: "Nosotros" },
   { href: "/contacto", label: "Contacto" }
 ];
 
 const secondaryLinks = [
-  { href: "/about", label: "About" },
-  { href: "/faq", label: "FAQ" }
+  { href: "/galeria", label: "Galería" },
+  { href: "/sorteos", label: "Sorteos" },
+  { href: "/faq", label: "Preguntas frecuentes" }
 ];
 
 function readString(value: unknown, fallback: string) {
