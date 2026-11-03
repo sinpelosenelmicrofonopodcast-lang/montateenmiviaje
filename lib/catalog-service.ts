@@ -10,6 +10,7 @@ import {
 } from "@/lib/types";
 import { dispatchNotificationEventSafe } from "@/lib/notifications/orchestrator";
 import { getSupabaseAdminClient, hasSupabaseConfig } from "@/lib/supabase-admin";
+import { hgmGoogleReady, listGoogleTrips } from "@/lib/hgm-google";
 
 interface AppTripRow {
   id: string;
@@ -436,6 +437,9 @@ async function hydrateTrips(rows: AppTripRow[]) {
 }
 
 export async function listTripsService(options?: { publishedOnly?: boolean; featuredOnly?: boolean }) {
+  if (options?.publishedOnly && process.env.HGM_GOOGLE_CATALOG_ENABLED === "true" && hgmGoogleReady()) {
+    return listGoogleTrips(options);
+  }
   if (!hasSupabaseConfig()) {
     return [] as Trip[];
   }
@@ -459,6 +463,10 @@ export async function listTripsService(options?: { publishedOnly?: boolean; feat
 }
 
 export async function getTripBySlugService(slug: string, options?: { includeUnpublished?: boolean }) {
+  if (!options?.includeUnpublished && process.env.HGM_GOOGLE_CATALOG_ENABLED === "true" && hgmGoogleReady()) {
+    const trips = await listGoogleTrips({ publishedOnly: true });
+    return trips.find(trip => trip.slug === slug) ?? null;
+  }
   if (!hasSupabaseConfig()) {
     return null;
   }

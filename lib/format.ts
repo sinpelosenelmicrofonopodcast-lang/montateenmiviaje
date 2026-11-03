@@ -38,6 +38,9 @@ export function getStartingDeposit(packages: Array<{ deposit: number } | null | 
 }
 
 export function formatDateRange(startDate: string, endDate: string) {
+  if (!startDate || !endDate || !Number.isFinite(Date.parse(startDate)) || !Number.isFinite(Date.parse(endDate))) {
+    return "Fechas por anunciar";
+  }
   const formatter = new Intl.DateTimeFormat("es-ES", {
     day: "2-digit",
     month: "short",
