@@ -7,9 +7,9 @@ export async function GET() {
     const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "listTrips", token: process.env.HGM_GOOGLE_API_TOKEN, publishedOnly: true }), cache: "no-store", signal: AbortSignal.timeout(25000) });
     if (!response.ok) throw new Error("HTTP");
     const result = await response.json();
-    if (result.ok !== true || !Array.isArray(result.rows)) throw new Error("REJECTED");
+    if (result.ok !== true || !Array.isArray(result.rows)) throw new Error(result.error === "UNAUTHORIZED" ? "UNAUTHORIZED" : "REJECTED");
     return NextResponse.json({ ok: true, connected: true, provider: "google" });
-  } catch {
-    return NextResponse.json({ ok: false, connected: false }, { status: 503 });
+  } catch (error) {
+    return NextResponse.json({ ok: false, connected: false, code: error instanceof Error && ["CONFIG","HTTP","UNAUTHORIZED","REJECTED"].includes(error.message) ? error.message : "TRANSPORT" }, { status: 503 });
   }
 }
