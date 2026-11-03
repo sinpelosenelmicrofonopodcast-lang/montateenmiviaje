@@ -138,9 +138,9 @@ export function CustomRequestForm() {
         <div className="card" style={{ marginTop: "16px" }}>
           <p className="success">Solicitud enviada. ID: {result.requestId}</p>
           <p>
-            Te notificaremos por correo cuando el paquete esté listo. También puedes revisarlo aquí:
+            {result.packagePageUrl.startsWith("/solicitud/") ? "Tu solicitud fue registrada para revisión. Guarda tu referencia y consulta los próximos pasos aquí:" : "También puedes revisar tu propuesta aquí:"}
             <a className="button-outline" href={result.packagePageUrl} style={{ marginLeft: "12px" }}>
-              Ver estado de propuesta
+              {result.packagePageUrl.startsWith("/solicitud/") ? "Ver confirmación" : "Ver estado de propuesta"}
             </a>
           </p>
         </div>
